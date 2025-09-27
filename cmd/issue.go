@@ -925,6 +925,8 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
+  linctl issue update LIN-123 --parent-issue LIN-456
+  linctl issue update LIN-123 --parent-issue unassigned
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1049,6 +1051,29 @@ Examples:
 			}
 		}
 
+		// Handle parent issue update
+		if cmd.Flags().Changed("parent-issue") {
+			parentIssue, _ := cmd.Flags().GetString("parent-issue")
+			switch parentIssue {
+			case "unassigned", "none", "":
+				input["parentId"] = nil
+			default:
+				// Validate parent issue exists and get its UUID
+				parentIssueDetails, err := client.GetIssue(context.Background(), parentIssue)
+				if err != nil {
+					output.Error(fmt.Sprintf("Parent issue not found: %s", parentIssue), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				// Prevent self-reference
+				if parentIssue == args[0] {
+					output.Error("Issue cannot be its own parent", plaintext, jsonOut)
+					os.Exit(1)
+				}
+				// Use the UUID instead of the identifier
+				input["parentId"] = parentIssueDetails.ID
+			}
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1118,4 +1143,5 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().String("parent-issue", "", "Parent issue ID/identifier (or 'unassigned' to remove parent)")
 }
