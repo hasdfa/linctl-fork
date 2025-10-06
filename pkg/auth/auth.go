@@ -74,6 +74,11 @@ func loadAuth() (*AuthConfig, error) {
 
 // GetAuthHeader returns the authorization header value
 func GetAuthHeader() (string, error) {
+
+    if apiKey := os.Getenv("LINEAR_API_KEY"); apiKey != "" {
+        return apiKey, nil
+    }
+	
 	config, err := loadAuth()
 	if err != nil {
 		return "", err
