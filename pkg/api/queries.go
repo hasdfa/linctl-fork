@@ -1174,6 +1174,10 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id

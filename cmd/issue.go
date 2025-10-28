@@ -849,6 +849,7 @@ var issueCreateCmd = &cobra.Command{
 		teamKey, _ := cmd.Flags().GetString("team")
 		priority, _ := cmd.Flags().GetInt("priority")
 		assignToMe, _ := cmd.Flags().GetBool("assign-me")
+		projectID, _ := cmd.Flags().GetString("project")
 
 		if title == "" {
 			output.Error("Title is required (--title)", plaintext, jsonOut)
@@ -890,6 +891,10 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
+		if projectID != "" {
+			input["projectId"] = projectID
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
@@ -908,6 +913,9 @@ var issueCreateCmd = &cobra.Command{
 				issue.Title)
 			if issue.Assignee != nil {
 				fmt.Printf("  Assigned to: %s\n", color.New(color.FgCyan).Sprint(issue.Assignee.Name))
+			}
+			if issue.Project != nil {
+				fmt.Printf("  Project: %s\n", color.New(color.FgCyan).Sprint(issue.Project.Name))
 			}
 		}
 	},
@@ -1108,6 +1116,7 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("project", "", "Project ID to attach issue to")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
