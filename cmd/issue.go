@@ -850,6 +850,7 @@ var issueCreateCmd = &cobra.Command{
 		priority, _ := cmd.Flags().GetInt("priority")
 		assignToMe, _ := cmd.Flags().GetBool("assign-me")
 		projectID, _ := cmd.Flags().GetString("project")
+		labelIDs, _ := cmd.Flags().GetStringSlice("labels")
 
 		if title == "" {
 			output.Error("Title is required (--title)", plaintext, jsonOut)
@@ -895,6 +896,10 @@ var issueCreateCmd = &cobra.Command{
 			input["projectId"] = projectID
 		}
 
+		if len(labelIDs) > 0 {
+			input["labelIds"] = labelIDs
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
@@ -916,6 +921,13 @@ var issueCreateCmd = &cobra.Command{
 			}
 			if issue.Project != nil {
 				fmt.Printf("  Project: %s\n", color.New(color.FgCyan).Sprint(issue.Project.Name))
+			}
+			if issue.Labels != nil && len(issue.Labels.Nodes) > 0 {
+				labelNames := []string{}
+				for _, label := range issue.Labels.Nodes {
+					labelNames = append(labelNames, label.Name)
+				}
+				fmt.Printf("  Labels: %s\n", color.New(color.FgCyan).Sprint(strings.Join(labelNames, ", ")))
 			}
 		}
 	},
@@ -1057,6 +1069,12 @@ Examples:
 			}
 		}
 
+		// Handle labels update
+		if cmd.Flags().Changed("labels") {
+			labelIDs, _ := cmd.Flags().GetStringSlice("labels")
+			input["labelIds"] = labelIDs
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1117,6 +1135,7 @@ func init() {
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
 	issueCreateCmd.Flags().String("project", "", "Project ID to attach issue to")
+	issueCreateCmd.Flags().StringSlice("labels", []string{}, "Label IDs to attach (comma-separated)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -1127,4 +1146,5 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().StringSlice("labels", []string{}, "Label IDs to set (comma-separated, replaces existing labels)")
 }
