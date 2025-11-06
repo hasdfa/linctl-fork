@@ -1,0 +1,11 @@
+{
+  "parts": [
+    {
+      "part_id": "cli",
+      "name": "linctl CLI",
+      "root_path": "/Users/johnpates/Documents/github_clones/linctl",
+      "project_type_id": "cli",
+      "display_name": "CLI"
+    }
+  ]
+}

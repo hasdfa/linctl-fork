@@ -1,0 +1,116 @@
+{
+  "items": [
+    {
+      "title": "README.md",
+      "relative_path": "README.md",
+      "type": "readme",
+      "part_id": "cli",
+      "description": "Primary project overview"
+    },
+    {
+      "title": "CONTRIBUTING.md",
+      "relative_path": "CONTRIBUTING.md",
+      "type": "contributing",
+      "part_id": "cli",
+      "description": "Contribution guidelines"
+    },
+    {
+      "title": "deprecations.md",
+      "relative_path": "docs/snapshots/deprecations.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "oauth-authentication.md",
+      "relative_path": "docs/snapshots/oauth-authentication.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "typescript-sdk.md",
+      "relative_path": "docs/snapshots/typescript-sdk.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "attachments.md",
+      "relative_path": "docs/snapshots/attachments.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "pagination.md",
+      "relative_path": "docs/snapshots/pagination.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "webhooks.md",
+      "relative_path": "docs/snapshots/webhooks.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "file-storage-authentication.md",
+      "relative_path": "docs/snapshots/file-storage-authentication.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "filtering.md",
+      "relative_path": "docs/snapshots/filtering.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "graphql-api.md",
+      "relative_path": "docs/snapshots/graphql-api.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "README.md",
+      "relative_path": "docs/snapshots/README.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "file-upload.md",
+      "relative_path": "docs/snapshots/file-upload.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "rate-limiting.md",
+      "relative_path": "docs/snapshots/rate-limiting.md",
+      "type": "docs",
+      "part_id": "cli",
+      "description": "General documentation"
+    },
+    {
+      "title": "bump-tap.yml",
+      "relative_path": ".github/workflows/bump-tap.yml",
+      "type": "ci_cd",
+      "part_id": "cli",
+      "description": "CI/CD workflows or config"
+    },
+    {
+      "title": "master_api_ref.md",
+      "relative_path": "master_api_ref.md",
+      "type": "api",
+      "part_id": "cli",
+      "description": "Linear CLI API reference"
+    }
+  ]
+}
