@@ -1,0 +1,90 @@
+# Workflow Status
+# This tracks progress through BMM methodology phases
+# Phase 3/4 (Implementation) is tracked separately in sprint-status.yaml
+
+# STATUS DEFINITIONS:
+# ==================
+# Initial Status (before completion):
+#   - required: Must be completed to progress
+#   - optional: Can be completed but not required
+#   - recommended: Strongly suggested but not required
+#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
+#
+# Completion Status:
+#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - skipped: Optional/conditional workflow that was skipped
+
+generated: "2025-11-05 10:01:46 +08"
+project: "linctl"
+project_type: "software"
+selected_track: "quick-flow"
+field_type: "brownfield"
+workflow_path: "bmad/bmm/workflows/workflow-status/paths/quick-flow-brownfield.yaml"
+
+workflow_status:
+  # Prerequisite: Documentation
+  document-project: "docs-bmad/index.md"
+
+  # Phase 0: Discovery (Optional)
+  research: optional
+
+  # Phase 1: Planning
+  tech-spec: "docs-bmad/tech-spec.md"
+
+  # Phase 2: Implementation
+  sprint-planning: required
+
+# Epic and Stories (from tech-spec workflow)
+epic_1:
+  slug: "project-management"
+  title: "Comprehensive Project Management"
+  total_stories: 3
+  total_points: 10
+  estimated_timeline: "1-2 weeks (1 sprint)"
+  linear_id: "642b2e48-c781-44a7-bf98-797013b938e2"
+  linear_identifier: "RAE-333"
+  linear_url: "https://linear.app/raegis/issue/RAE-333"
+
+stories:
+  - id: "story-project-management-1"
+    title: "Issue-Project Assignment"
+    status: "draft"
+    points: 2
+    time: "1.5h"
+    file: "docs-bmad/stories/story-project-management-1.md"
+    dependencies: []
+    linear_id: "b9df6969-efb3-4021-b5fa-a2918c8332fa"
+    linear_identifier: "RAE-334"
+    linear_url: "https://linear.app/raegis/issue/RAE-334"
+
+  - id: "story-project-management-2"
+    title: "Project Creation & Archival"
+    status: "draft"
+    points: 3
+    time: "3.5h"
+    file: "docs-bmad/stories/story-project-management-2.md"
+    dependencies: ["story-project-management-1"]
+    linear_id: "83ddc9b0-c2f7-4459-891d-a2c9058b29c1"
+    linear_identifier: "RAE-335"
+    linear_url: "https://linear.app/raegis/issue/RAE-335"
+
+  - id: "story-project-management-3"
+    title: "Project Updates & Enhanced Display"
+    status: "draft"
+    points: 5
+    time: "4h"
+    file: "docs-bmad/stories/story-project-management-3.md"
+    dependencies: ["story-project-management-2"]
+    linear_id: "5cb97ff2-d548-43b2-b348-3d591ba46f8c"
+    linear_identifier: "RAE-336"
+    linear_url: "https://linear.app/raegis/issue/RAE-336"
+
+# checkpoints (from workflow-init):
+# project_name: linctl
+# user_description: Forked linctl; add project tagging features; may open PR upstream
+# field_type: brownfield
+# project_type: software
+# brainstorm_requested: false
+# research_requested: true
+# selected_track: quick-flow
+# workflow_path_file: bmad/bmm/workflows/workflow-status/paths/quick-flow-brownfield.yaml

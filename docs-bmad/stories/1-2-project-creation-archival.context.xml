@@ -1,0 +1,137 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.2</storyId>
+    <title>Project Creation &amp; Archival</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-06</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs-bmad/stories/story-project-management-2.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>a project manager or team lead using linctl</asA>
+    <iWant>to create new projects and archive completed ones from the CLI</iWant>
+    <soThat>I can manage project lifecycle without leaving my terminal workflow</soThat>
+    <tasks>
+      <task id="1" acs="1,2">Implement CreateProject() method in pkg/api/queries.go with GraphQL projectCreate mutation</task>
+      <task id="2" acs="3">Implement ArchiveProject() method in pkg/api/queries.go with GraphQL projectArchive mutation</task>
+      <task id="3" acs="1,2,4,5,6,7">Create projectCreateCmd in cmd/project.go with required/optional flags and validation</task>
+      <task id="4" acs="3,7">Create projectArchiveCmd in cmd/project.go</task>
+      <task id="5" acs="all">Register new commands in init() function</task>
+      <task id="6" acs="all">Test all acceptance criteria manually</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Create project with minimal required fields (name, team) with default values (state: planned, priority: 0)</ac>
+    <ac id="2">Create project with all optional fields (state, priority, description, target-date)</ac>
+    <ac id="3">Archive project by UUID with success message</ac>
+    <ac id="4">Validation error when --name or --team missing: "Both --name and --team are required"</ac>
+    <ac id="5">Error for invalid team key: "Team 'INVALID' not found. Use 'linctl team list' to see available teams."</ac>
+    <ac id="6">Validation fails before API call for invalid state or priority values with clear messages</ac>
+    <ac id="7">All commands support --json, --plaintext output formats following existing conventions</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="APIs and Interfaces #2">Complete GraphQL projectCreate mutation schema with all required/optional fields</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="APIs and Interfaces #4">GraphQL projectArchive mutation specification</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Data Models and Contracts">Project entity structure with all fields, validation rules for state/priority</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Workflows and Sequencing #2">Complete project creation workflow with team resolution</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Non-Functional Requirements">Performance, security, error handling requirements</doc>
+      <doc path="docs-bmad/architecture.md" section="Component Overview">CLI command structure and Cobra patterns</doc>
+      <doc path="docs-bmad/architecture.md" section="API Design">Linear GraphQL API integration patterns</doc>
+    </docs>
+    <code>
+      <file path="cmd/project.go" kind="command" lines="50-100" reason="Existing projectListCmd pattern - shows Cobra command structure, flag parsing, team resolution, API client usage, output formatting">Reuse patterns for new projectCreateCmd and projectArchiveCmd</file>
+      <file path="cmd/project.go" lines="76-85" reason="Team key to UUID resolution pattern using client.GetTeam() - required for project creation">Must implement same pattern for team resolution before creating project</file>
+      <file path="cmd/issue.go" kind="command" reason="Validation patterns for required fields, state enums, priority ranges with clear error messages">Follow same validation approach for project state/priority</file>
+      <file path="pkg/api/queries.go" kind="api-client" lines="1-80" reason="API client patterns - GraphQL query construction, type definitions, error handling">Implement CreateProject and ArchiveProject methods following existing patterns</file>
+      <file path="pkg/api/client.go" kind="types" reason="Project type already defined (line 58 in queries.go shows Issue has *Project field)">Verify Project type has all fields needed or extend it</file>
+    </code>
+    <dependencies>
+      <go>
+        <package name="github.com/spf13/cobra" version="1.8.0" usage="CLI command framework - required for command definition and flag parsing"></package>
+        <package name="github.com/spf13/viper" version="1.18.2" usage="Configuration management - used for global flags (plaintext, json)"></package>
+        <package name="github.com/fatih/color" version="1.16.0" usage="Terminal colors for output formatting"></package>
+        <package name="context" version="std" usage="Required for API client methods (ctx context.Context parameter)"></package>
+        <package name="encoding/json" version="std" usage="JSON marshaling for GraphQL input objects"></package>
+      </go>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface name="CreateProject" kind="API method">
+      <signature>func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}) (*Project, error)</signature>
+      <path>pkg/api/queries.go</path>
+      <description>GraphQL projectCreate mutation - accepts name (required), teamId (required), plus optional fields (description, state, priority, targetDate)</description>
+    </interface>
+    <interface name="ArchiveProject" kind="API method">
+      <signature>func (c *Client) ArchiveProject(ctx context.Context, id string) (bool, error)</signature>
+      <path>pkg/api/queries.go</path>
+      <description>GraphQL projectArchive mutation - accepts project UUID, returns success boolean</description>
+    </interface>
+    <interface name="GetTeam" kind="Existing API method">
+      <signature>func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error)</signature>
+      <path>pkg/api/queries.go</path>
+      <description>Existing method to resolve team key to Team object with UUID - reuse for team resolution</description>
+    </interface>
+    <interface name="projectCreate (GraphQL)" kind="Linear GraphQL Mutation">
+      <signature>mutation { projectCreate(input: ProjectCreateInput!) { success project { id name description state priority team { id key name } createdAt updatedAt } } }</signature>
+      <description>Linear API mutation for creating projects</description>
+    </interface>
+    <interface name="projectArchive (GraphQL)" kind="Linear GraphQL Mutation">
+      <signature>mutation { projectArchive(id: String!) { success project { id name archivedAt } } }</signature>
+      <description>Linear API mutation for archiving projects</description>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint>Follow existing Cobra command patterns from cmd/project.go (projectListCmd structure)</constraint>
+    <constraint>Use cmd.Flags().GetString() and cmd.Flags().GetInt() for flag retrieval</constraint>
+    <constraint>Validate ALL inputs before making API calls to avoid unnecessary network requests</constraint>
+    <constraint>State validation: must be one of [planned, started, paused, completed, canceled]</constraint>
+    <constraint>Priority validation: must be integer 0-4 (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)</constraint>
+    <constraint>Use cmd.Flags().Changed() to detect which optional flags were explicitly set</constraint>
+    <constraint>Resolve team key to UUID using existing client.GetTeam() method before API call</constraint>
+    <constraint>Support all output formats: table (default), --json, --plaintext via viper.GetBool()</constraint>
+    <constraint>Use output.Error() for error messages with plaintext/jsonOut parameters</constraint>
+    <constraint>Exit with os.Exit(1) on errors, os.Exit(0) on success</constraint>
+    <constraint>Add help text with examples following existing command patterns</constraint>
+    <constraint>Register commands in init() using projectCmd.AddCommand()</constraint>
+    <constraint>No new Go dependencies required - use only existing packages</constraint>
+    <constraint>GraphQL mutations use JSON marshaling for input objects: json.Marshal(input)</constraint>
+    <constraint>GraphQL queries call c.query(ctx, query) and parse response</constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      Testing follows linctl's existing patterns:
+      - Manual testing for write operations (create, archive have side effects)
+      - Smoke tests for read-only commands (tests/smoke_test.sh)
+      - No unit tests exist currently (Go test framework available but unused)
+      - Test against real Linear API in development workspace
+      - Verify all output formats (table, JSON, plaintext)
+      - Validate error messages are clear and actionable
+    </standards>
+    <locations>
+      <location>tests/manual_project_tests.sh - Create manual test script for project operations</location>
+      <location>tests/smoke_test.sh - Extend with project list/get tests (read-only)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Create project with --name "Test Q1" --team ENG; verify default state=planned, priority=0</idea>
+      <idea ac="2">Create project with all flags --name "Test" --team ENG --state started --priority 1 --description "Full test"; verify all fields</idea>
+      <idea ac="3">Archive created project; verify success message and archivedAt timestamp set</idea>
+      <idea ac="4">Attempt create without --name; verify error "Both --name and --team are required"</idea>
+      <idea ac="4">Attempt create without --team; verify error "Both --name and --team are required"</idea>
+      <idea ac="5">Attempt create with --team INVALID; verify error "Team 'INVALID' not found. Use 'linctl team list' to see available teams."</idea>
+      <idea ac="6">Attempt create with --state invalid; verify validation error lists allowed states</idea>
+      <idea ac="6">Attempt create with --priority 5; verify error "Priority must be between 0 and 4"</idea>
+      <idea ac="6">Attempt create with --priority -1; verify error "Priority must be between 0 and 4"</idea>
+      <idea ac="7">Run all commands with --json flag; verify JSON output format</idea>
+      <idea ac="7">Run all commands with --plaintext flag; verify plaintext output format</idea>
+      <idea ac="all">Test end-to-end: Create project → List projects (verify new project appears) → Archive project → Verify archived</idea>
+    </ideas>
+  </tests>
+</story-context>

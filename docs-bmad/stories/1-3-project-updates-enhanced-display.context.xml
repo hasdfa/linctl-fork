@@ -1,0 +1,140 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.3</storyId>
+    <title>Project Updates &amp; Enhanced Display</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-06</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs-bmad/stories/story-project-management-3.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>a project manager using linctl for project tracking</asA>
+    <iWant>to update project fields and see complete project information in list/detail views</iWant>
+    <soThat>I can manage project state, priority, initiatives, labels, descriptions, and summary entirely from the CLI</soThat>
+    <tasks>
+      <task id="1" acs="1,2,3,3.1,3.2">Implement UpdateProject() method in pkg/api/queries.go with partial update support</task>
+      <task id="2" acs="1-6,9">Create projectUpdateCmd with flag change detection using cmd.Flags().Changed()</task>
+      <task id="3" acs="7,9">Enhance projectGetCmd GraphQL query to fetch all new fields (state, priority, initiative, labels, description, summary)</task>
+      <task id="4" acs="8,9">Enhance projectListCmd GraphQL query and add State/Priority columns to table formatter</task>
+      <task id="5" acs="9">Update output formatters to display new fields in table/plaintext formats (JSON auto-includes)</task>
+      <task id="6" acs="all">Register projectUpdateCmd and test all acceptance criteria</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Update single project field (name) successfully</ac>
+    <ac id="2">Update project state with validation against allowed values (planned, started, paused, completed, canceled)</ac>
+    <ac id="3">Update multiple fields in single API call (state, priority, labels)</ac>
+    <ac id="3.1">Update project description field</ac>
+    <ac id="3.2">Update project shortSummary field (CLI flag: --summary)</ac>
+    <ac id="4">Error when no fields provided: "At least one field to update is required"</ac>
+    <ac id="5">Validation error for invalid state: "Invalid state. Must be one of: planned, started, paused, completed, canceled"</ac>
+    <ac id="6">Validation error for invalid priority: "Priority must be between 0 and 4"</ac>
+    <ac id="7">project get displays all fields including state, priority, initiative, labels, description, summary</ac>
+    <ac id="8">project list table includes State and Priority columns</ac>
+    <ac id="9">All commands support --json and --plaintext with complete field data</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="APIs and Interfaces #3">Complete GraphQL projectUpdate mutation schema with partial update support</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="APIs and Interfaces #5">Enhanced project get/list queries with all new fields</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Data Models and Contracts">Project entity with enhanced fields (Initiative, Labels, description, shortSummary)</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Workflows and Sequencing #3">Multi-field project update workflow with flag change detection</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Detailed Design">Services/modules table shows Output Formatters need enhancement for new fields</doc>
+    </docs>
+    <code>
+      <file path="cmd/project.go" lines="50-150" reason="Existing projectListCmd and projectGetCmd - need GraphQL query enhancement and output formatter updates">Add state, priority, initiative, labels, description, shortSummary to queries and display</file>
+      <file path="cmd/issue.go" kind="command" reason="Update command patterns - shows how to detect changed flags using cmd.Flags().Changed()">Critical pattern for partial updates - only send changed fields to API</file>
+      <file path="pkg/api/queries.go" kind="api-client" reason="Implement UpdateProject method with partial update logic">Build input map from only changed fields, support label name-to-ID resolution</file>
+      <file path="internal/output/*.go" kind="formatters" reason="Table and plaintext formatters need updates to display new fields">Add State, Priority columns to table; format nested objects (Initiative, Labels array)</file>
+    </code>
+    <dependencies>
+      <go>
+        <package name="github.com/spf13/cobra" version="1.8.0" usage="cmd.Flags().Changed() for detecting which flags were explicitly set"></package>
+        <package name="github.com/olekukonko/tablewriter" version="0.0.5" usage="Table formatting - add new columns for State and Priority"></package>
+        <package name="strings" version="std" usage="Parse comma-separated label names (strings.Split)"></package>
+      </go>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface name="UpdateProject" kind="API method">
+      <signature>func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]interface{}) (*Project, error)</signature>
+      <path>pkg/api/queries.go</path>
+      <description>GraphQL projectUpdate mutation - supports partial updates (only include changed fields in input map)</description>
+    </interface>
+    <interface name="GetLabels" kind="API method (may need to create)">
+      <signature>func (c *Client) GetLabels(ctx context.Context) ([]Label, error)</signature>
+      <path>pkg/api/queries.go</path>
+      <description>Query all workspace labels for name-to-ID resolution when --label flag provided</description>
+    </interface>
+    <interface name="projectUpdate (GraphQL)" kind="Linear GraphQL Mutation">
+      <signature>mutation { projectUpdate(id: String!, input: ProjectUpdateInput!) { success project { id name description shortSummary state priority initiative { id name } labels { nodes { id name } } updatedAt } } }</signature>
+      <description>Linear API mutation for updating projects - supports partial updates</description>
+    </interface>
+    <interface name="project (GraphQL)" kind="Linear GraphQL Query">
+      <signature>query { project(id: String!) { id name description shortSummary state priority progress team { id key name } initiative { id name } labels { nodes { id name } } createdAt updatedAt archivedAt } }</signature>
+      <description>Enhanced query for project get command - includes all new fields</description>
+    </interface>
+    <interface name="projects (GraphQL)" kind="Linear GraphQL Query">
+      <signature>query { projects(filter: ProjectFilter, first: Int) { nodes { id name state priority progress team { key name } initiative { name } labels { nodes { name } } updatedAt } } }</signature>
+      <description>Enhanced query for project list command - includes State, Priority for table display</description>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint>CRITICAL: Use cmd.Flags().Changed() to detect which flags were explicitly set - only include those in input map for partial updates</constraint>
+    <constraint>Validate at least one field flag provided before attempting update (AC #4)</constraint>
+    <constraint>State validation: must be one of [planned, started, paused, completed, canceled] (AC #5)</constraint>
+    <constraint>Priority validation: must be integer 0-4 (AC #6)</constraint>
+    <constraint>Label parsing: split comma-separated string, resolve each label name to ID via GetLabels() query, build labelIds array</constraint>
+    <constraint>Handle label resolution errors gracefully if label name not found in workspace</constraint>
+    <constraint>GraphQL mutation only includes fields in input map (partial update pattern)</constraint>
+    <constraint>Enhanced queries must request new fields: state, priority, initiative {id name}, labels {nodes {id name}}, description, shortSummary</constraint>
+    <constraint>Table formatter: add State and Priority as new columns in project list output</constraint>
+    <constraint>Handle nested objects in display: Initiative shows name, Labels show comma-separated names</constraint>
+    <constraint>JSON output automatically includes all fields (no formatter changes needed)</constraint>
+    <constraint>Plaintext output: display new fields in key-value format following existing patterns</constraint>
+    <constraint>CLI flag names: use --summary (not --short-summary) to match CLI conventions</constraint>
+    <constraint>projectUpdateCmd requires project UUID as first positional argument</constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      Testing follows linctl's existing patterns:
+      - Manual testing for write operations (update has side effects)
+      - Read-only smoke tests for enhanced get/list commands
+      - Test against real Linear API in development workspace
+      - Verify all output formats (table, JSON, plaintext)
+      - Validate error messages are clear and actionable
+      - Test partial update logic (single field, multiple fields, no fields)
+    </standards>
+    <locations>
+      <location>tests/manual_project_tests.sh - Extend with update test cases</location>
+      <location>tests/smoke_test.sh - Add enhanced get/list tests to verify new fields display</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Update project name only; verify only name changed, other fields unchanged</idea>
+      <idea ac="2">Update state to each allowed value (planned, started, paused, completed, canceled); verify each works</idea>
+      <idea ac="3">Update multiple fields at once (--state started --priority 2 --label "urgent,backend"); verify all changed</idea>
+      <idea ac="3.1">Update description with long text; verify full description stored and displayed</idea>
+      <idea ac="3.2">Update summary with short text; verify shortSummary field updated (not description)</idea>
+      <idea ac="4">Run update with no flags (only UUID); verify error "At least one field to update is required"</idea>
+      <idea ac="5">Attempt update with --state invalid_state; verify error lists all allowed states</idea>
+      <idea ac="6">Attempt update with --priority 5; verify error "Priority must be between 0 and 4"</idea>
+      <idea ac="6">Attempt update with --priority -1; verify same error</idea>
+      <idea ac="7">Run project get on project with all fields populated; verify state, priority, initiative, labels, description, summary all displayed</idea>
+      <idea ac="7">Test with project missing optional fields (no initiative, no labels); verify handles nulls gracefully</idea>
+      <idea ac="8">Run project list; verify State and Priority columns appear in table output</idea>
+      <idea ac="8">Verify State column shows current state value, Priority shows numeric value 0-4</idea>
+      <idea ac="9">Run all commands with --json; verify complete field data in JSON output</idea>
+      <idea ac="9">Run all commands with --plaintext; verify new fields displayed in plaintext format</idea>
+      <idea ac="all">End-to-end: Create project → Update multiple fields → Get project (verify) → List projects (verify) → Update single field</idea>
+      <idea ac="3">Test label resolution: Create labels in Linear UI → Use --label "labelname" → Verify label assigned correctly</idea>
+      <idea ac="3">Test label resolution error: Use --label "nonexistent" → Verify clear error message</idea>
+    </ideas>
+  </tests>
+</story-context>

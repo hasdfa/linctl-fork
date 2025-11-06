@@ -1,0 +1,98 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.1</storyId>
+    <title>Issue-Project Assignment</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-06</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs-bmad/stories/story-project-management-1.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>a linctl user (developer, project manager, or automation script)</asA>
+    <iWant>to assign projects to issues during creation and updates</iWant>
+    <soThat>I can manage the complete issue-project workflow from the terminal without switching to Linear's web UI</soThat>
+    <tasks>
+      <task id="1" acs="1,2,3,4,5">Add --project flag to issueCreateCmd and issueUpdateCmd in cmd/issue.go</task>
+      <task id="2" acs="1,2,3">Extend GraphQL issue mutations to include projectId field</task>
+      <task id="3" acs="3,4">Implement "unassigned" special case handling (sets projectId to nil)</task>
+      <task id="4" acs="1,2">Update issue output formatters to display project assignment</task>
+      <task id="5" acs="all">Test all acceptance criteria</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Create issue with valid project UUID via --project flag, verify assignment in output</ac>
+    <ac id="2">Update existing issue project assignment via --project flag</ac>
+    <ac id="3">Remove project assignment using --project unassigned (sets projectId to nil)</ac>
+    <ac id="4">Error for invalid project UUID: "Project 'INVALID-UUID' not found"</ac>
+    <ac id="5">JSON output includes project field with ID and name</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="APIs and Interfaces #1">Complete GraphQL issueCreate and issueUpdate mutations with projectId field</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Data Models and Contracts">Issue entity extended with Project field (nullable)</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Workflows and Sequencing #1">Issue creation with project assignment workflow including validation</doc>
+      <doc path="docs-bmad/tech-spec-epic-1.md" section="Error Handling Flows">"unassigned" special case and invalid UUID handling</doc>
+    </docs>
+    <code>
+      <file path="cmd/issue.go" kind="command" lines="1-100" reason="Existing issueCreateCmd and issueUpdateCmd - add --project flag here">Follow existing flag pattern, add project validation logic</file>
+      <file path="pkg/api/queries.go" kind="api-client" reason="Issue mutation methods - extend to include projectId in input map">Add projectId field to GraphQL mutation input when --project flag provided</file>
+      <file path="internal/output/*.go" kind="formatters" reason="Issue output formatters - add project display">Show project name when issue has project assignment</file>
+    </code>
+    <dependencies>
+      <go>
+        <package name="github.com/spf13/cobra" version="1.8.0" usage="Add --project flag to existing commands"></package>
+      </go>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface name="issueCreate (GraphQL)" kind="Linear GraphQL Mutation">
+      <signature>mutation { issueCreate(input: IssueCreateInput!) { success issue { id identifier title project { id name } team { id key name } assignee { id name } state { id name } priority createdAt updatedAt } } }</signature>
+      <description>Extended with projectId field in input - nullable UUID string</description>
+    </interface>
+    <interface name="issueUpdate (GraphQL)" kind="Linear GraphQL Mutation">
+      <signature>mutation { issueUpdate(id: String!, input: IssueUpdateInput!) { success issue { id identifier title project { id name } ... } } }</signature>
+      <description>Extended with projectId field in input - nullable UUID string (null removes assignment)</description>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint>Add --project flag to issueCreateCmd and issueUpdateCmd using cmd.Flags().String()</constraint>
+    <constraint>Project UUID validation: basic format check, actual existence validated by Linear API</constraint>
+    <constraint>Special case: --project unassigned sets projectId to nil (removes assignment)</constraint>
+    <constraint>Include projectId in GraphQL mutation input map only when --project flag provided</constraint>
+    <constraint>GraphQL queries must request project {id name} in response for display</constraint>
+    <constraint>Handle null project gracefully in output (issue may not have project assigned)</constraint>
+    <constraint>Error handling: API returns 404 for invalid project UUID - display clear error</constraint>
+    <constraint>JSON output automatically includes project field (no special handling needed)</constraint>
+    <constraint>Table/plaintext output: add Project column or field showing project name</constraint>
+    <constraint>Backward compatibility: --project flag is optional, existing commands work unchanged</constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      Testing follows linctl's existing patterns:
+      - Manual testing for write operations (create, update have side effects)
+      - Test against real Linear API in development workspace
+      - Verify all output formats (table, JSON, plaintext)
+      - Validate error messages are clear and actionable
+    </standards>
+    <locations>
+      <location>tests/manual_issue_tests.sh - Create manual test script for issue-project operations</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Create issue with --project PROJECT_UUID; verify issue created with project assignment showing in output</idea>
+      <idea ac="2">Update existing issue with --project NEW_PROJECT_UUID; verify project changed</idea>
+      <idea ac="3">Update issue with --project unassigned; verify project field becomes null/empty</idea>
+      <idea ac="4">Attempt create/update with --project INVALID_UUID; verify error "Project 'INVALID_UUID' not found"</idea>
+      <idea ac="5">Create/update issue with --json flag; verify project field present with {id, name}</idea>
+      <idea ac="5">Verify JSON output includes null when issue has no project assigned</idea>
+      <idea ac="all">End-to-end: Create project → Create issue with project → Verify → Update issue project → Verify → Remove project assignment</idea>
+      <idea ac="all">Test backward compatibility: Create issue without --project flag; verify works as before</idea>
+    </ideas>
+  </tests>
+</story-context>
