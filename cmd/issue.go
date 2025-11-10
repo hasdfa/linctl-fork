@@ -869,7 +869,14 @@ var issueCreateCmd = &cobra.Command{
 	Use:     "create",
 	Aliases: []string{"new"},
 	Short:   "Create a new issue",
-	Long:    `Create a new issue in Linear.`,
+	Long: `Create a new issue in Linear.
+
+Examples:
+  linctl issue create --title "Bug fix" --team ENG
+  linctl issue create --title "Feature request" --team ENG --description "Add dark mode"
+  linctl issue create --title "Task" --team ENG --priority 1 --assign-me
+  linctl issue create --title "Task" --team ENG --project <PROJECT-ID>
+  linctl issue create --title "Bug" --team ENG --labels "bug,urgent"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -984,6 +991,8 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
+  linctl issue update LIN-123 --labels <ID1>,<ID2>
+  linctl issue update LIN-123 --labels ""  # Clear all labels
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
