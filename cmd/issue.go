@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dorkitude/linctl/pkg/api"
-	"github.com/dorkitude/linctl/pkg/auth"
-	"github.com/dorkitude/linctl/pkg/output"
-	"github.com/dorkitude/linctl/pkg/utils"
+	"github.com/charlietran/linctl/pkg/api"
+	"github.com/charlietran/linctl/pkg/auth"
+	"github.com/charlietran/linctl/pkg/output"
+	"github.com/charlietran/linctl/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -112,7 +112,11 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 				fmt.Printf("- **Team**: %s\n", issue.Team.Key)
 			}
 			if issue.Cycle != nil {
-				fmt.Printf("- **Cycle**: %s\n", issue.Cycle.Name)
+				if issue.Cycle.Name != "" {
+					fmt.Printf("- **Cycle**: %s\n", issue.Cycle.Name)
+				} else if issue.Cycle.Number > 0 {
+					fmt.Printf("- **Cycle**: Cycle %d\n", issue.Cycle.Number)
+				}
 			}
 			fmt.Printf("- **Created**: %s\n", issue.CreatedAt.Format("2006-01-02"))
 			fmt.Printf("- **URL**: %s\n", issue.URL)
@@ -141,7 +145,11 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 
 		cycle := "-"
 		if issue.Cycle != nil {
-			cycle = issue.Cycle.Name
+			if issue.Cycle.Name != "" {
+				cycle = issue.Cycle.Name
+			} else if issue.Cycle.Number > 0 {
+				cycle = fmt.Sprintf("Cycle %d", issue.Cycle.Number)
+			}
 		}
 
 		state := ""
