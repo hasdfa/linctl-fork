@@ -866,12 +866,111 @@ Examples:
 	},
 }
 
+var projectDeleteCmd = &cobra.Command{
+	Use:     "delete [project-id]",
+	Aliases: []string{"rm", "remove"},
+	Short:   "Delete or archive a project",
+	Long: `Delete or archive a project.
+
+By default, this command archives the project (soft delete).
+Use --permanent to permanently delete (cannot be undone).
+
+Examples:
+  linctl project delete abc123              # Archive project
+  linctl project delete abc123 --permanent  # Permanent delete (use with caution)
+  linctl project delete abc123 --force      # Skip confirmation prompt`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		projectID := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error("Not authenticated. Run 'linctl auth' first.", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+
+		permanent, _ := cmd.Flags().GetBool("permanent")
+		force, _ := cmd.Flags().GetBool("force")
+
+		// Get project details for confirmation message
+		project, err := client.GetProject(context.Background(), projectID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to find project '%s': %v", projectID, err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Confirmation prompt (unless --force or --json)
+		if !force && !jsonOut {
+			action := "archive"
+			if permanent {
+				action = "PERMANENTLY DELETE"
+			}
+			fmt.Printf("Are you sure you want to %s project '%s'? [y/N]: ", action, project.Name)
+
+			var response string
+			fmt.Scanln(&response)
+			response = strings.ToLower(strings.TrimSpace(response))
+
+			if response != "y" && response != "yes" {
+				fmt.Println("Cancelled.")
+				return
+			}
+		}
+
+		if permanent {
+			// Permanent delete
+			err = client.DeleteProject(context.Background(), projectID)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to delete project: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			if jsonOut {
+				output.JSON(map[string]interface{}{
+					"success":   true,
+					"action":    "deleted",
+					"projectId": projectID,
+					"name":      project.Name,
+				})
+			} else if plaintext {
+				fmt.Printf("Deleted project: %s\n", project.Name)
+			} else {
+				fmt.Printf("%s Permanently deleted project %s\n",
+					color.New(color.FgRed).Sprint("✗"),
+					color.New(color.FgCyan, color.Bold).Sprint(project.Name))
+			}
+		} else {
+			// Archive (soft delete)
+			archivedProject, err := client.ArchiveProject(context.Background(), projectID)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to archive project: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			if jsonOut {
+				output.JSON(archivedProject)
+			} else if plaintext {
+				fmt.Printf("Archived project: %s\n", project.Name)
+			} else {
+				fmt.Printf("%s Archived project %s\n",
+					color.New(color.FgYellow).Sprint("📦"),
+					color.New(color.FgCyan, color.Bold).Sprint(project.Name))
+			}
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(projectCmd)
 	projectCmd.AddCommand(projectListCmd)
 	projectCmd.AddCommand(projectGetCmd)
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectUpdateCmd)
+	projectCmd.AddCommand(projectDeleteCmd)
 
 	// List command flags
 	projectListCmd.Flags().StringP("team", "t", "", "Filter by team key")
@@ -901,4 +1000,8 @@ func init() {
 	projectUpdateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD, or empty to remove)")
 	projectUpdateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD, or empty to remove)")
 	projectUpdateCmd.Flags().String("color", "", "Project color (hex code)")
+
+	// Delete command flags
+	projectDeleteCmd.Flags().Bool("permanent", false, "Permanently delete (cannot be undone)")
+	projectDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
 }
