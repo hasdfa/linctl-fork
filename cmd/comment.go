@@ -171,6 +171,39 @@ var commentCreateCmd = &cobra.Command{
 	},
 }
 
+var commentDeleteCmd = &cobra.Command{
+	Use:     "delete COMMENT-ID",
+	Aliases: []string{"rm"},
+	Short:   "Delete a comment",
+	Long:    `Delete a comment by its ID.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		commentID := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+
+		err = client.DeleteComment(context.Background(), commentID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to delete comment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(map[string]interface{}{"success": true, "deleted": commentID})
+		} else {
+			fmt.Printf("✓ Deleted comment %s\n", commentID)
+		}
+	},
+}
+
 // formatTimeAgo formats a time as a human-readable "time ago" string
 func formatTimeAgo(t time.Time) string {
 	duration := time.Since(t)
@@ -214,6 +247,7 @@ func init() {
 	rootCmd.AddCommand(commentCmd)
 	commentCmd.AddCommand(commentListCmd)
 	commentCmd.AddCommand(commentCreateCmd)
+	commentCmd.AddCommand(commentDeleteCmd)
 
 	// List command flags
 	commentListCmd.Flags().IntP("limit", "l", 50, "Maximum number of comments to return")

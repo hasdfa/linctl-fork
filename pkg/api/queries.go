@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -17,6 +18,13 @@ type User struct {
 	Active      bool       `json:"active"`
 	Admin       bool       `json:"admin"`
 	CreatedAt   *time.Time `json:"createdAt"`
+}
+
+// Organization represents a Linear organization/workspace
+type Organization struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	URLKey string `json:"urlKey"`
 }
 
 // Team represents a Linear team
@@ -79,6 +87,8 @@ type Issue struct {
 	SlackIssueComments    []SlackComment   `json:"slackIssueComments"`
 	ExternalUserCreator   *ExternalUser    `json:"externalUserCreator"`
 	CustomerTickets       []CustomerTicket `json:"customerTickets"`
+	AgentSession          *AgentSession    `json:"agentSession"`
+	Delegate              *User            `json:"delegate"`
 }
 
 // State represents an issue state
@@ -368,6 +378,30 @@ type ProjectLink struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// AgentSession represents an agent session on an issue
+type AgentSession struct {
+	ID         string           `json:"id"`
+	Status     string           `json:"status"` // pending, active, complete, awaitingInput, error, stale
+	CreatedAt  time.Time        `json:"createdAt"`
+	UpdatedAt  time.Time        `json:"updatedAt"`
+	AppUser    *User            `json:"appUser"`
+	Activities *AgentActivities `json:"activities"`
+}
+
+// AgentActivities is a paginated list of agent activities
+type AgentActivities struct {
+	Nodes    []AgentActivity `json:"nodes"`
+	PageInfo PageInfo        `json:"pageInfo"`
+}
+
+// AgentActivity represents a single activity in an agent session
+type AgentActivity struct {
+	ID        string                 `json:"id"`
+	CreatedAt time.Time              `json:"createdAt"`
+	Ephemeral bool                   `json:"ephemeral"`
+	Content   map[string]interface{} `json:"content"`
+}
+
 // GetViewer returns the current authenticated user
 func (c *Client) GetViewer(ctx context.Context) (*User, error) {
 	query := `
@@ -394,6 +428,30 @@ func (c *Client) GetViewer(ctx context.Context) (*User, error) {
 	}
 
 	return &response.Viewer, nil
+}
+
+// GetOrganization returns the current organization/workspace
+func (c *Client) GetOrganization(ctx context.Context) (*Organization, error) {
+	query := `
+		query Organization {
+			organization {
+				id
+				name
+				urlKey
+			}
+		}
+	`
+
+	var response struct {
+		Organization Organization `json:"organization"`
+	}
+
+	err := c.Execute(ctx, query, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Organization, nil
 }
 
 // GetIssues returns a list of issues with optional filtering
@@ -805,6 +863,89 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 
 	variables := map[string]interface{}{
 		"id": id,
+	}
+
+	var response struct {
+		Issue Issue `json:"issue"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Issue, nil
+}
+
+// GetIssueAgentSession returns the issue with delegate and comments containing agent sessions
+func (c *Client) GetIssueAgentSession(ctx context.Context, issueId string) (*Issue, error) {
+	query := `
+		query IssueAgentSession($id: String!) {
+			issue(id: $id) {
+				id
+				identifier
+				title
+				state {
+					name
+					type
+				}
+				assignee {
+					name
+					email
+				}
+				delegate {
+					id
+					name
+					displayName
+					email
+				}
+				comments(first: 50) {
+					nodes {
+						id
+						body
+						createdAt
+						user {
+							name
+							displayName
+						}
+						agentSession {
+							id
+							status
+							createdAt
+							updatedAt
+							appUser {
+								id
+								name
+								displayName
+							}
+							activities(first: 50) {
+								nodes {
+									id
+									createdAt
+									ephemeral
+									content {
+										... on AgentActivityThoughtContent { type body }
+										... on AgentActivityResponseContent { type body }
+										... on AgentActivityActionContent { type action parameter }
+										... on AgentActivityErrorContent { type body }
+										... on AgentActivityElicitationContent { type body }
+										... on AgentActivityPromptContent { type body }
+									}
+								}
+								pageInfo {
+									hasNextPage
+									endCursor
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": issueId,
 	}
 
 	var response struct {
@@ -1237,14 +1378,15 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
 
 // Comment represents a Linear comment
 type Comment struct {
-	ID        string     `json:"id"`
-	Body      string     `json:"body"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	EditedAt  *time.Time `json:"editedAt"`
-	User      *User      `json:"user"`
-	Parent    *Comment   `json:"parent"`
-	Children  *Comments  `json:"children"`
+	ID           string        `json:"id"`
+	Body         string        `json:"body"`
+	CreatedAt    time.Time     `json:"createdAt"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
+	EditedAt     *time.Time    `json:"editedAt"`
+	User         *User         `json:"user"`
+	Parent       *Comment      `json:"parent"`
+	Children     *Comments     `json:"children"`
+	AgentSession *AgentSession `json:"agentSession"`
 }
 
 // Comments represents a paginated list of comments
@@ -1300,6 +1442,47 @@ func (c *Client) GetTeamStates(ctx context.Context, teamKey string) ([]WorkflowS
 	}
 
 	return response.Team.States.Nodes, nil
+}
+
+// GetTeamLabels returns labels for a specific team
+func (c *Client) GetTeamLabels(ctx context.Context, teamKey string) ([]Label, error) {
+	query := `
+		query TeamLabels($key: String!) {
+			team(id: $key) {
+				labels {
+					nodes {
+						id
+						name
+						color
+						description
+						parent {
+							id
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"key": teamKey,
+	}
+
+	var response struct {
+		Team struct {
+			Labels struct {
+				Nodes []Label `json:"nodes"`
+			} `json:"labels"`
+		} `json:"team"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.Team.Labels.Nodes, nil
 }
 
 // GetTeamMembers returns members of a specific team
@@ -1420,6 +1603,22 @@ func (c *Client) GetUser(ctx context.Context, email string) (*User, error) {
 	return &response.User, nil
 }
 
+// FindUserByIdentifier finds a user by email, name, or displayName
+func (c *Client) FindUserByIdentifier(ctx context.Context, identifier string) (*User, error) {
+	users, err := c.GetUsers(ctx, 100, "", "")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, user := range users.Nodes {
+		if user.Email == identifier || user.Name == identifier || user.DisplayName == identifier {
+			return &user, nil
+		}
+	}
+
+	return nil, fmt.Errorf("user not found: %s", identifier)
+}
+
 // GetIssueComments returns comments for a specific issue
 func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int, after string, orderBy string) (*Comments, error) {
 	query := `
@@ -1512,4 +1711,57 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	}
 
 	return &response.CommentCreate.Comment, nil
+}
+
+// DeleteComment deletes a comment by ID
+func (c *Client) DeleteComment(ctx context.Context, commentID string) error {
+	query := `
+		mutation DeleteComment($id: String!) {
+			commentDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": commentID,
+	}
+
+	var response struct {
+		CommentDelete struct {
+			Success bool `json:"success"`
+		} `json:"commentDelete"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+
+	if !response.CommentDelete.Success {
+		return fmt.Errorf("failed to delete comment")
+	}
+
+	return nil
+}
+
+// MentionAgent @mentions an agent in a comment to trigger them
+func (c *Client) MentionAgent(ctx context.Context, issueID string, agentDisplayName string, message string) (string, error) {
+	// Get workspace slug from organization
+	org, err := c.GetOrganization(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	// Create a comment that @mentions the agent using Linear URL format
+	// Format: https://linear.app/workspace/profiles/displayname
+	mentionURL := fmt.Sprintf("https://linear.app/%s/profiles/%s", org.URLKey, agentDisplayName)
+	mentionMessage := fmt.Sprintf("%s\n\n%s", mentionURL, message)
+
+	comment, err := c.CreateComment(ctx, issueID, mentionMessage)
+	if err != nil {
+		return "", fmt.Errorf("failed to create comment: %w", err)
+	}
+
+	return comment.ID, nil
 }
