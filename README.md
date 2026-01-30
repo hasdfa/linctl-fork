@@ -142,7 +142,7 @@ linctl issue update LIN-123 --priority 1  # 0=None, 1=Urgent, 2=High, 3=Normal, 
 linctl issue update LIN-123 --due-date "2024-12-31"
 linctl issue update LIN-123 --due-date ""  # Remove due date
 linctl issue update LIN-123 --parent LIN-456  # Set parent issue
-linctl issue update LIN-123 --parent none  # Remove parent
+linctl issue update LIN-123 --parent none  # Remove parent (also accepts 'null' or empty string)
 
 # Update multiple fields at once
 linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1

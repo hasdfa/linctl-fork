@@ -982,6 +982,20 @@ Examples:
 
 		client := api.NewClient(authHeader)
 
+		// Lazy-fetch current issue to avoid redundant API calls across flag handlers
+		var cachedIssue *api.Issue
+		getCurrentIssue := func() (*api.Issue, error) {
+			if cachedIssue != nil {
+				return cachedIssue, nil
+			}
+			issue, err := client.GetIssue(context.Background(), args[0])
+			if err != nil {
+				return nil, err
+			}
+			cachedIssue = issue
+			return cachedIssue, nil
+		}
+
 		// Build update input
 		input := make(map[string]interface{})
 
@@ -1055,8 +1069,8 @@ Examples:
 		if cmd.Flags().Changed("state") {
 			stateName, _ := cmd.Flags().GetString("state")
 
-			// First, get the issue to know which team it belongs to
-			issue, err := client.GetIssue(context.Background(), args[0])
+			// Get the issue to know which team it belongs to
+			issue, err := getCurrentIssue()
 			if err != nil {
 				output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
 				os.Exit(1)
@@ -1130,7 +1144,7 @@ Examples:
 				// Prevent self-referencing by comparing canonical IDs
 				// We fetch the current issue to get both its UUID and identifier for proper comparison,
 				// since the user might pass either format for args[0]
-				currentIssue, err := client.GetIssue(context.Background(), args[0])
+				currentIssue, err := getCurrentIssue()
 				if err != nil {
 					output.Error(fmt.Sprintf("Failed to get current issue: %v", err), plaintext, jsonOut)
 					os.Exit(1)
@@ -1224,6 +1238,6 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
-	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none' to remove parent)")
+	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none', 'null', or empty to remove parent)")
 	issueUpdateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, displayName, or 'none' to remove)")
 }
