@@ -1134,6 +1134,10 @@ func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}
 		return nil, err
 	}
 
+	if !response.ProjectCreate.Success {
+		return nil, fmt.Errorf("project creation was not successful")
+	}
+
 	return &response.ProjectCreate.Project, nil
 }
 
@@ -1188,6 +1192,10 @@ func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]
 	err := c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
+	}
+
+	if !response.ProjectUpdate.Success {
+		return nil, fmt.Errorf("project update was not successful")
 	}
 
 	return &response.ProjectUpdate.Project, nil
@@ -1254,6 +1262,10 @@ func (c *Client) ArchiveProject(ctx context.Context, id string) (*Project, error
 	err := c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
+	}
+
+	if !response.ProjectArchive.Success {
+		return nil, fmt.Errorf("project archiving was not successful")
 	}
 
 	return &response.ProjectArchive.Entity, nil

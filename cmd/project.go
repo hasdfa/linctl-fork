@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/dorkitude/linctl/pkg/api"
 	"github.com/dorkitude/linctl/pkg/auth"
@@ -14,6 +16,51 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+// validProjectStates contains all valid project states
+var validProjectStates = []string{"planned", "started", "paused", "completed", "canceled"}
+
+// validateProjectState validates and normalizes a project state string
+func validateProjectState(state string) (string, error) {
+	for _, vs := range validProjectStates {
+		if strings.EqualFold(state, vs) {
+			return strings.ToLower(state), nil
+		}
+	}
+	return "", fmt.Errorf("invalid state '%s'. Valid states: %s", state, strings.Join(validProjectStates, ", "))
+}
+
+// validateDateFormat validates that a date string is in YYYY-MM-DD format
+func validateDateFormat(dateStr string) error {
+	_, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return fmt.Errorf("invalid date format '%s'. Use YYYY-MM-DD format (e.g., 2026-01-15)", dateStr)
+	}
+	return nil
+}
+
+// validateHexColor validates that a color string is a valid hex color
+func validateHexColor(colorStr string) error {
+	pattern := regexp.MustCompile(`^#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$`)
+	if !pattern.MatchString(colorStr) {
+		return fmt.Errorf("invalid color format '%s'. Use hex color format (e.g., #FF5733 or FF5733)", colorStr)
+	}
+	return nil
+}
+
+// lookupUserByNameOrEmail finds a user by name or email from the user list
+func lookupUserByNameOrEmail(client *api.Client, identifier string, plaintext, jsonOut bool) (string, error) {
+	users, err := client.GetUsers(context.Background(), 100, "", "")
+	if err != nil {
+		return "", fmt.Errorf("failed to get users: %v", err)
+	}
+	for _, user := range users.Nodes {
+		if user.Email == identifier || user.Name == identifier {
+			return user.ID, nil
+		}
+	}
+	return "", fmt.Errorf("user not found: %s", identifier)
+}
 
 // constructProjectURL constructs an ID-based project URL
 func constructProjectURL(projectID string, originalURL string) string {
@@ -591,7 +638,7 @@ var projectCreateCmd = &cobra.Command{
 Examples:
   linctl project create --name "Q1 Release" --team ENG
   linctl project create --name "Auth Overhaul" --team ENG --description "Rewrite authentication system"
-  linctl project create --name "Mobile App" --team ENG --lead me --start-date 2024-01-01 --target-date 2024-06-30
+  linctl project create --name "Mobile App" --team ENG --lead me --start-date 2026-01-01 --target-date 2026-06-30
   linctl project create --name "Bug Bash" --team ENG,QA --state started`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
@@ -644,19 +691,12 @@ Examples:
 
 		if cmd.Flags().Changed("state") {
 			state, _ := cmd.Flags().GetString("state")
-			validStates := []string{"planned", "started", "paused", "completed", "canceled"}
-			isValid := false
-			for _, vs := range validStates {
-				if strings.EqualFold(state, vs) {
-					input["state"] = strings.ToLower(state)
-					isValid = true
-					break
-				}
-			}
-			if !isValid {
-				output.Error(fmt.Sprintf("Invalid state '%s'. Valid states: %s", state, strings.Join(validStates, ", ")), plaintext, jsonOut)
+			normalizedState, err := validateProjectState(state)
+			if err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
 				os.Exit(1)
 			}
+			input["state"] = normalizedState
 		}
 
 		if cmd.Flags().Changed("lead") {
@@ -669,38 +709,39 @@ Examples:
 				}
 				input["leadId"] = viewer.ID
 			} else {
-				users, err := client.GetUsers(context.Background(), 100, "", "")
+				userID, err := lookupUserByNameOrEmail(client, leadValue, plaintext, jsonOut)
 				if err != nil {
-					output.Error(fmt.Sprintf("Failed to get users: %v", err), plaintext, jsonOut)
+					output.Error(err.Error(), plaintext, jsonOut)
 					os.Exit(1)
 				}
-				var foundUser *api.User
-				for _, user := range users.Nodes {
-					if user.Email == leadValue || user.Name == leadValue {
-						foundUser = &user
-						break
-					}
-				}
-				if foundUser == nil {
-					output.Error(fmt.Sprintf("User not found: %s", leadValue), plaintext, jsonOut)
-					os.Exit(1)
-				}
-				input["leadId"] = foundUser.ID
+				input["leadId"] = userID
 			}
 		}
 
 		if cmd.Flags().Changed("start-date") {
 			startDate, _ := cmd.Flags().GetString("start-date")
+			if err := validateDateFormat(startDate); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			}
 			input["startDate"] = startDate
 		}
 
 		if cmd.Flags().Changed("target-date") {
 			targetDate, _ := cmd.Flags().GetString("target-date")
+			if err := validateDateFormat(targetDate); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			}
 			input["targetDate"] = targetDate
 		}
 
 		if cmd.Flags().Changed("color") {
 			colorValue, _ := cmd.Flags().GetString("color")
+			if err := validateHexColor(colorValue); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			}
 			input["color"] = colorValue
 		}
 
@@ -738,7 +779,7 @@ Examples:
   linctl project update abc123 --description "Updated description"
   linctl project update abc123 --state started
   linctl project update abc123 --lead john@company.com
-  linctl project update abc123 --target-date 2024-12-31
+  linctl project update abc123 --target-date 2026-12-31
   linctl project update abc123 --state completed`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -769,19 +810,12 @@ Examples:
 
 		if cmd.Flags().Changed("state") {
 			state, _ := cmd.Flags().GetString("state")
-			validStates := []string{"planned", "started", "paused", "completed", "canceled"}
-			isValid := false
-			for _, vs := range validStates {
-				if strings.EqualFold(state, vs) {
-					input["state"] = strings.ToLower(state)
-					isValid = true
-					break
-				}
-			}
-			if !isValid {
-				output.Error(fmt.Sprintf("Invalid state '%s'. Valid states: %s", state, strings.Join(validStates, ", ")), plaintext, jsonOut)
+			normalizedState, err := validateProjectState(state)
+			if err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
 				os.Exit(1)
 			}
+			input["state"] = normalizedState
 		}
 
 		if cmd.Flags().Changed("lead") {
@@ -797,23 +831,12 @@ Examples:
 				}
 				input["leadId"] = viewer.ID
 			default:
-				users, err := client.GetUsers(context.Background(), 100, "", "")
+				userID, err := lookupUserByNameOrEmail(client, leadValue, plaintext, jsonOut)
 				if err != nil {
-					output.Error(fmt.Sprintf("Failed to get users: %v", err), plaintext, jsonOut)
+					output.Error(err.Error(), plaintext, jsonOut)
 					os.Exit(1)
 				}
-				var foundUser *api.User
-				for _, user := range users.Nodes {
-					if user.Email == leadValue || user.Name == leadValue {
-						foundUser = &user
-						break
-					}
-				}
-				if foundUser == nil {
-					output.Error(fmt.Sprintf("User not found: %s", leadValue), plaintext, jsonOut)
-					os.Exit(1)
-				}
-				input["leadId"] = foundUser.ID
+				input["leadId"] = userID
 			}
 		}
 
@@ -822,6 +845,10 @@ Examples:
 			if startDate == "" {
 				input["startDate"] = nil
 			} else {
+				if err := validateDateFormat(startDate); err != nil {
+					output.Error(err.Error(), plaintext, jsonOut)
+					os.Exit(1)
+				}
 				input["startDate"] = startDate
 			}
 		}
@@ -831,12 +858,20 @@ Examples:
 			if targetDate == "" {
 				input["targetDate"] = nil
 			} else {
+				if err := validateDateFormat(targetDate); err != nil {
+					output.Error(err.Error(), plaintext, jsonOut)
+					os.Exit(1)
+				}
 				input["targetDate"] = targetDate
 			}
 		}
 
 		if cmd.Flags().Changed("color") {
 			colorValue, _ := cmd.Flags().GetString("color")
+			if err := validateHexColor(colorValue); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			}
 			input["color"] = colorValue
 		}
 
@@ -912,7 +947,10 @@ Examples:
 			fmt.Printf("Are you sure you want to %s project '%s'? [y/N]: ", action, project.Name)
 
 			var response string
-			fmt.Scanln(&response)
+			if _, err := fmt.Scanln(&response); err != nil {
+				fmt.Println("\nNo input detected. Cancelled.")
+				return
+			}
 			response = strings.ToLower(strings.TrimSpace(response))
 
 			if response != "y" && response != "yes" {
@@ -984,7 +1022,7 @@ func init() {
 	projectCreateCmd.Flags().String("name", "", "Project name (required)")
 	projectCreateCmd.Flags().StringSliceP("team", "t", []string{}, "Team key(s) (required, comma-separated for multiple)")
 	projectCreateCmd.Flags().StringP("description", "d", "", "Project description")
-	projectCreateCmd.Flags().StringP("state", "s", "", "Initial state (planned, started, paused)")
+	projectCreateCmd.Flags().StringP("state", "s", "", "Initial state (planned, started, paused, completed, canceled)")
 	projectCreateCmd.Flags().String("lead", "", "Project lead (email, name, or 'me')")
 	projectCreateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD)")
 	projectCreateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD)")
