@@ -19,11 +19,15 @@ import (
 var commentCmd = &cobra.Command{
 	Use:   "comment",
 	Short: "Manage issue comments",
-	Long: `Manage comments on Linear issues including listing and creating comments.
+	Long: `Manage comments on Linear issues including listing, creating, and deleting comments.
 
 Examples:
-  linctl comment list LIN-123        # List comments for an issue
-  linctl comment create LIN-123 --body "This is fixed"  # Add a comment`,
+  linctl comment list LIN-123                           # List comments for an issue
+  linctl comment ls LIN-123                             # List comments (alias)
+  linctl comment create LIN-123 --body "This is fixed"  # Add a comment
+  linctl comment delete <comment-id>                    # Delete a comment
+  linctl comment rm <comment-id>                        # Delete a comment (alias)
+  linctl comment remove <comment-id>                    # Delete a comment (alias)`,
 }
 
 var commentListCmd = &cobra.Command{
@@ -83,7 +87,7 @@ var commentListCmd = &cobra.Command{
 				if i > 0 {
 					fmt.Println("---")
 				}
-				fmt.Printf("Author: %s\n", comment.User.Name)
+				fmt.Printf("Author: %s\n", commentAuthorName(&comment))
 				fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
 				fmt.Printf("Comment:\n%s\n", comment.Body)
 			}
@@ -109,7 +113,7 @@ var commentListCmd = &cobra.Command{
 				// Header with author and time
 				timeAgo := formatTimeAgo(comment.CreatedAt)
 				fmt.Printf("%s %s %s\n",
-					color.New(color.FgCyan, color.Bold).Sprint(comment.User.Name),
+					color.New(color.FgCyan, color.Bold).Sprint(commentAuthorName(&comment)),
 					color.New(color.FgWhite, color.Faint).Sprint("•"),
 					color.New(color.FgWhite, color.Faint).Sprint(timeAgo))
 
@@ -124,8 +128,14 @@ var commentCreateCmd = &cobra.Command{
 	Use:     "create ISSUE-ID",
 	Aliases: []string{"add", "new"},
 	Short:   "Create a comment on an issue",
-	Long:    `Add a new comment to a specific issue.`,
-	Args:    cobra.ExactArgs(1),
+	Long: `Add a new comment to a specific issue.
+
+Use the --parent flag to create a threaded reply under an existing comment.
+
+Examples:
+  linctl comment create LIN-123 --body "This is a top-level comment"
+  linctl comment create LIN-123 --body "This is a reply" --parent COMMENT-ID`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -148,8 +158,11 @@ var commentCreateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Get optional parent ID for threaded replies
+		parentID, _ := cmd.Flags().GetString("parent")
+
 		// Create comment
-		comment, err := client.CreateComment(context.Background(), issueID, body)
+		comment, err := client.CreateComment(context.Background(), issueID, body, parentID)
 		if err != nil {
 			output.Error(fmt.Sprintf("Failed to create comment: %v", err), plaintext, jsonOut)
 			os.Exit(1)
@@ -160,13 +173,68 @@ var commentCreateCmd = &cobra.Command{
 			output.JSON(comment)
 		} else if plaintext {
 			fmt.Printf("Created comment on %s\n", issueID)
+			fmt.Printf("ID: %s\n", comment.ID)
 			fmt.Printf("Author: %s\n", comment.User.Name)
 			fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
+			if comment.Parent != nil && comment.Parent.ID != "" {
+				fmt.Printf("Parent: %s\n", comment.Parent.ID)
+			}
 		} else {
-			fmt.Printf("%s Added comment to %s\n",
-				color.New(color.FgGreen).Sprint("✓"),
-				color.New(color.FgCyan, color.Bold).Sprint(issueID))
+			if comment.Parent != nil && comment.Parent.ID != "" {
+				fmt.Printf("%s Added reply to comment on %s\n",
+					color.New(color.FgGreen).Sprint("✓"),
+					color.New(color.FgCyan, color.Bold).Sprint(issueID))
+			} else {
+				fmt.Printf("%s Added comment to %s\n",
+					color.New(color.FgGreen).Sprint("✓"),
+					color.New(color.FgCyan, color.Bold).Sprint(issueID))
+			}
+			fmt.Printf("ID: %s\n", color.New(color.FgWhite, color.Faint).Sprint(comment.ID))
 			fmt.Printf("\n%s\n", comment.Body)
+		}
+	},
+}
+
+var commentDeleteCmd = &cobra.Command{
+	Use:     "delete COMMENT-ID",
+	Aliases: []string{"rm", "remove"},
+	Short:   "Delete a comment",
+	Long:    `Delete a comment by its ID.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		commentID := args[0]
+
+		// Get auth header
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Create API client
+		client := api.NewClient(authHeader)
+
+		err = client.DeleteComment(context.Background(), commentID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to delete comment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Handle output
+		if jsonOut {
+			output.JSON(map[string]interface{}{
+				"status":    "success",
+				"commentId": commentID,
+				"message":   "Comment deleted successfully",
+			})
+		} else if plaintext {
+			fmt.Printf("Deleted comment %s\n", commentID)
+		} else {
+			fmt.Printf("%s Deleted comment %s\n",
+				color.New(color.FgGreen).Sprint("✓"),
+				color.New(color.FgCyan).Sprint(commentID))
 		}
 	},
 }
@@ -214,6 +282,7 @@ func init() {
 	rootCmd.AddCommand(commentCmd)
 	commentCmd.AddCommand(commentListCmd)
 	commentCmd.AddCommand(commentCreateCmd)
+	commentCmd.AddCommand(commentDeleteCmd)
 
 	// List command flags
 	commentListCmd.Flags().IntP("limit", "l", 50, "Maximum number of comments to return")
@@ -221,5 +290,6 @@ func init() {
 
 	// Create command flags
 	commentCreateCmd.Flags().StringP("body", "b", "", "Comment body (required)")
+	commentCreateCmd.Flags().String("parent", "", "Parent comment ID for threaded replies")
 	_ = commentCreateCmd.MarkFlagRequired("body")
 }

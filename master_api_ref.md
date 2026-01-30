@@ -576,6 +576,11 @@ linctl comment ls LIN-123
 # Add comment
 linctl comment create LIN-123 --body "Comment text"
 linctl comment add LIN-123 -b "Comment text"
+
+# Delete comment
+linctl comment delete <comment-id>
+linctl comment rm <comment-id>
+linctl comment remove <comment-id>
 ```
 
 ### Auth Commands
