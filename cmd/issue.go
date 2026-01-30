@@ -1,11 +1,11 @@
 package cmd
 
 import (
-    "context"
-    "fmt"
-    "os"
-    "strings"
-    "regexp"
+	"context"
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
 
 	"github.com/dorkitude/linctl/pkg/api"
 	"github.com/dorkitude/linctl/pkg/auth"
@@ -21,10 +21,14 @@ var uuidRegexp = regexp.MustCompile(`^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{
 func isValidUUID(s string) bool { return uuidRegexp.MatchString(s) }
 
 func isProjectNotFoundErr(err error) bool {
-    if err == nil { return false }
-    e := strings.ToLower(err.Error())
-    if !strings.Contains(e, "not found") { return false }
-    return strings.Contains(e, "project") || strings.Contains(e, "projectid")
+	if err == nil {
+		return false
+	}
+	e := strings.ToLower(err.Error())
+	if !strings.Contains(e, "not found") {
+		return false
+	}
+	return strings.Contains(e, "project") || strings.Contains(e, "projectid")
 }
 
 // buildProjectInput normalizes a --project flag value to a GraphQL input value.
@@ -33,17 +37,18 @@ func isProjectNotFoundErr(err error) bool {
 // - value=nil with ok=true means explicitly unset (unassigned)
 // - value=string (uuid) with ok=true means assign to that project
 func buildProjectInput(projectFlag string) (interface{}, bool, error) {
-    switch strings.TrimSpace(projectFlag) {
-    case "":
-        return nil, false, nil
-    case "unassigned":
-        return nil, true, nil
-    default:
-        if !isValidUUID(projectFlag) {
-            return nil, false, fmt.Errorf("Invalid project ID format: %s", projectFlag)
-        }
-        return projectFlag, true, nil
-    }
+	trimmed := strings.TrimSpace(projectFlag)
+	switch trimmed {
+	case "":
+		return nil, false, nil
+	case "unassigned":
+		return nil, true, nil
+	default:
+		if !isValidUUID(trimmed) {
+			return nil, false, fmt.Errorf("invalid project ID format: %s", trimmed)
+		}
+		return trimmed, true, nil
+	}
 }
 
 // issueCmd represents the issue command
@@ -930,34 +935,34 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
-            // Handle project assignment
-            if cmd.Flags().Changed("project") {
-                projectID, _ := cmd.Flags().GetString("project")
-                if val, ok, err := buildProjectInput(projectID); err != nil {
-                    output.Error(err.Error(), plaintext, jsonOut)
-                    os.Exit(1)
-                } else if ok {
-                    // For create, "unassigned" is equivalent to not setting project
-                    if val != nil {
-                        input["projectId"] = val
-                    }
-                }
-            }
+		// Handle project assignment
+		if cmd.Flags().Changed("project") {
+			projectID, _ := cmd.Flags().GetString("project")
+			if val, ok, err := buildProjectInput(projectID); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			} else if ok {
+				// For create, "unassigned" is equivalent to not setting project
+				if val != nil {
+					input["projectId"] = val
+				}
+			}
+		}
 
 		// Create issue
-			issue, err := client.CreateIssue(context.Background(), input)
-			if err != nil {
-				// Standardize project not-found error when a project was provided
-				if cmd.Flags().Changed("project") {
-					projectID, _ := cmd.Flags().GetString("project")
-					if projectID != "" && projectID != "unassigned" && isProjectNotFoundErr(err) {
-						output.Error(fmt.Sprintf("Project '%s' not found", projectID), plaintext, jsonOut)
-						os.Exit(1)
-					}
+		issue, err := client.CreateIssue(context.Background(), input)
+		if err != nil {
+			// Standardize project not-found error when a project was provided
+			if cmd.Flags().Changed("project") {
+				projectID, _ := cmd.Flags().GetString("project")
+				if projectID != "" && projectID != "unassigned" && isProjectNotFoundErr(err) {
+					output.Error(fmt.Sprintf("Project '%s' not found", projectID), plaintext, jsonOut)
+					os.Exit(1)
 				}
-				output.Error(fmt.Sprintf("Failed to create issue: %v", err), plaintext, jsonOut)
-				os.Exit(1)
 			}
+			output.Error(fmt.Sprintf("Failed to create issue: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
 
 		if jsonOut {
 			output.JSON(issue)
@@ -1117,16 +1122,16 @@ Examples:
 			}
 		}
 
-            // Handle project assignment update
-            if cmd.Flags().Changed("project") {
-                projectID, _ := cmd.Flags().GetString("project")
-                if val, ok, err := buildProjectInput(projectID); err != nil {
-                    output.Error(err.Error(), plaintext, jsonOut)
-                    os.Exit(1)
-                } else if ok {
-                    input["projectId"] = val
-                }
-            }
+		// Handle project assignment update
+		if cmd.Flags().Changed("project") {
+			projectID, _ := cmd.Flags().GetString("project")
+			if val, ok, err := buildProjectInput(projectID); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			} else if ok {
+				input["projectId"] = val
+			}
+		}
 
 		// Check if any updates were specified
 		if len(input) == 0 {
@@ -1135,19 +1140,19 @@ Examples:
 		}
 
 		// Update the issue
-			issue, err := client.UpdateIssue(context.Background(), args[0], input)
-			if err != nil {
-				// Standardize project not-found error when a project was provided
-				if cmd.Flags().Changed("project") {
-					projectID, _ := cmd.Flags().GetString("project")
-					if projectID != "" && projectID != "unassigned" && isProjectNotFoundErr(err) {
-						output.Error(fmt.Sprintf("Project '%s' not found", projectID), plaintext, jsonOut)
-						os.Exit(1)
-					}
+		issue, err := client.UpdateIssue(context.Background(), args[0], input)
+		if err != nil {
+			// Standardize project not-found error when a project was provided
+			if cmd.Flags().Changed("project") {
+				projectID, _ := cmd.Flags().GetString("project")
+				if projectID != "" && projectID != "unassigned" && isProjectNotFoundErr(err) {
+					output.Error(fmt.Sprintf("Project '%s' not found", projectID), plaintext, jsonOut)
+					os.Exit(1)
 				}
-				output.Error(fmt.Sprintf("Failed to update issue: %v", err), plaintext, jsonOut)
-				os.Exit(1)
 			}
+			output.Error(fmt.Sprintf("Failed to update issue: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
 
 		if jsonOut {
 			output.JSON(issue)

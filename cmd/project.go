@@ -1,29 +1,29 @@
 package cmd
 
 import (
-    "context"
-    "fmt"
-    "os"
-    "strings"
-    "time"
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"time"
 
-    "github.com/dorkitude/linctl/pkg/api"
-    "github.com/dorkitude/linctl/pkg/auth"
-    "github.com/dorkitude/linctl/pkg/output"
-    "github.com/dorkitude/linctl/pkg/utils"
-    "github.com/fatih/color"
-    "github.com/spf13/cobra"
-    "github.com/spf13/viper"
+	"github.com/dorkitude/linctl/pkg/api"
+	"github.com/dorkitude/linctl/pkg/auth"
+	"github.com/dorkitude/linctl/pkg/output"
+	"github.com/dorkitude/linctl/pkg/utils"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // projectAPI captures the subset of API client used by project commands.
 // This enables dependency injection in tests without changing public API types.
 type projectAPI interface {
-    GetTeam(ctx context.Context, key string) (*api.Team, error)
-    GetProjects(ctx context.Context, filter map[string]interface{}, first int, after string, orderBy string) (*api.Projects, error)
-    CreateProject(ctx context.Context, input map[string]interface{}) (*api.Project, error)
-    ArchiveProject(ctx context.Context, id string) (bool, error)
-    GetProject(ctx context.Context, id string) (*api.Project, error)
+	GetTeam(ctx context.Context, key string) (*api.Team, error)
+	GetProjects(ctx context.Context, filter map[string]interface{}, first int, after string, orderBy string) (*api.Projects, error)
+	CreateProject(ctx context.Context, input map[string]interface{}) (*api.Project, error)
+	ArchiveProject(ctx context.Context, id string) (bool, error)
+	GetProject(ctx context.Context, id string) (*api.Project, error)
 }
 
 // Injection points for testing
@@ -71,15 +71,15 @@ var projectListCmd = &cobra.Command{
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
 
-            // Get auth header
-            authHeader, err := getAuthHeader()
+		// Get auth header
+		authHeader, err := getAuthHeader()
 		if err != nil {
 			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
-            // Create API client
-            client := newAPIClient(authHeader)
+		// Create API client
+		client := newAPIClient(authHeader)
 
 		// Get filters
 		teamKey, _ := cmd.Flags().GetString("team")
@@ -256,15 +256,15 @@ var projectGetCmd = &cobra.Command{
 		jsonOut := viper.GetBool("json")
 		projectID := args[0]
 
-            // Get auth header
-            authHeader, err := getAuthHeader()
+		// Get auth header
+		authHeader, err := getAuthHeader()
 		if err != nil {
 			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
-            // Create API client
-            client := newAPIClient(authHeader)
+		// Create API client
+		client := newAPIClient(authHeader)
 
 		// Get project details
 		project, err := client.GetProject(context.Background(), projectID)
@@ -627,15 +627,15 @@ Examples:
 			os.Exit(1)
 		}
 
-        // Get auth header
-        authHeader, err := getAuthHeader()
+		// Get auth header
+		authHeader, err := getAuthHeader()
 		if err != nil {
 			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
-        // Create API client
-        client := newAPIClient(authHeader)
+		// Create API client
+		client := newAPIClient(authHeader)
 
 		// Resolve team key to team UUID
 		team, err := client.GetTeam(context.Background(), teamKey)
@@ -665,29 +665,29 @@ Examples:
 			}
 		}
 
-    // Validate priority if provided
-    var priority int
-    if cmd.Flags().Changed("priority") {
-        priority, _ = cmd.Flags().GetInt("priority")
-        if priority < 0 || priority > 4 {
-            output.Error("Priority must be between 0 (None) and 4 (Low)", plaintext, jsonOut)
-            os.Exit(1)
-        }
-    }
+		// Validate priority if provided
+		var priority int
+		if cmd.Flags().Changed("priority") {
+			priority, _ = cmd.Flags().GetInt("priority")
+			if priority < 0 || priority > 4 {
+				output.Error("Priority must be between 0 (None) and 4 (Low)", plaintext, jsonOut)
+				os.Exit(1)
+			}
+		}
 
-    // Validate target-date format if provided (YYYY-MM-DD)
-    if targetDate != "" {
-        if _, err := time.Parse("2006-01-02", targetDate); err != nil {
-            output.Error("Invalid --target-date format. Expected YYYY-MM-DD", plaintext, jsonOut)
-            os.Exit(1)
-        }
-    }
+		// Validate target-date format if provided (YYYY-MM-DD)
+		if targetDate != "" {
+			if _, err := time.Parse("2006-01-02", targetDate); err != nil {
+				output.Error("Invalid --target-date format. Expected YYYY-MM-DD", plaintext, jsonOut)
+				os.Exit(1)
+			}
+		}
 
-    // Build input map
-    input := map[string]interface{}{
-        "name":   name,
-        "teamIds": []string{team.ID},
-    }
+		// Build input map
+		input := map[string]interface{}{
+			"name":    name,
+			"teamIds": []string{team.ID},
+		}
 
 		if description != "" {
 			input["description"] = description
@@ -766,59 +766,59 @@ Examples:
 			os.Exit(1)
 		}
 
-        // Get auth header
-        authHeader, err := getAuthHeader()
+		// Get auth header
+		authHeader, err := getAuthHeader()
 		if err != nil {
 			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
-        // Create API client
-        client := newAPIClient(authHeader)
+		// Create API client
+		client := newAPIClient(authHeader)
 
-        // Archive project
-        success, err := client.ArchiveProject(context.Background(), projectID)
-        if err != nil {
-            output.Error(fmt.Sprintf("Failed to archive project: %v", err), plaintext, jsonOut)
-            os.Exit(1)
-        }
+		// Archive project
+		success, err := client.ArchiveProject(context.Background(), projectID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to archive project: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
 
-        // Try to fetch project details to include the name in output (best effort)
-        var projectName string
-        if success {
-            if proj, gerr := client.GetProject(context.Background(), projectID); gerr == nil && proj != nil {
-                projectName = proj.Name
-            }
-        }
+		// Try to fetch project details to include the name in output (best effort)
+		var projectName string
+		if success {
+			if proj, gerr := client.GetProject(context.Background(), projectID); gerr == nil && proj != nil {
+				projectName = proj.Name
+			}
+		}
 
-        // Handle output
-        if jsonOut {
-            payload := map[string]interface{}{
-                "success":    success,
-                "projectId":  projectID,
-            }
-            if projectName != "" {
-                payload["projectName"] = projectName
-            }
-            output.JSON(payload)
-        } else if plaintext {
-            fmt.Printf("# Project Archived\n\n")
-            if projectName != "" {
-                fmt.Printf("- **Name**: %s\n", projectName)
-            }
-            fmt.Printf("- **Project ID**: %s\n", projectID)
-            fmt.Printf("- **Status**: Archived\n")
-        } else {
-            fmt.Println()
-            fmt.Printf("%s Project archived successfully\n", color.New(color.FgGreen).Sprint("✓"))
-            fmt.Println()
-            if projectName != "" {
-                fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Name:"), projectName)
-            }
-            fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Project ID:"), projectID)
-            fmt.Println()
-        }
-    },
+		// Handle output
+		if jsonOut {
+			payload := map[string]interface{}{
+				"success":   success,
+				"projectId": projectID,
+			}
+			if projectName != "" {
+				payload["projectName"] = projectName
+			}
+			output.JSON(payload)
+		} else if plaintext {
+			fmt.Printf("# Project Archived\n\n")
+			if projectName != "" {
+				fmt.Printf("- **Name**: %s\n", projectName)
+			}
+			fmt.Printf("- **Project ID**: %s\n", projectID)
+			fmt.Printf("- **Status**: Archived\n")
+		} else {
+			fmt.Println()
+			fmt.Printf("%s Project archived successfully\n", color.New(color.FgGreen).Sprint("✓"))
+			fmt.Println()
+			if projectName != "" {
+				fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Name:"), projectName)
+			}
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Project ID:"), projectID)
+			fmt.Println()
+		}
+	},
 }
 
 func init() {

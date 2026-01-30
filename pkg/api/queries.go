@@ -1,10 +1,10 @@
 package api
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
 )
 
 // User represents a Linear user
@@ -1223,8 +1223,8 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 
 // GetTeam returns a single team by key; falls back to id lookup if not found
 func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
-    // First, attempt lookup by team key via teams connection
-    queryByKey := `
+	// First, attempt lookup by team key via teams connection
+	queryByKey := `
         query TeamByKey($key: String!) {
             teams(filter: { key: { eq: $key } }, first: 1) {
                 nodes {
@@ -1239,23 +1239,24 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
         }
     `
 
-    variables := map[string]interface{}{"key": key}
+	variables := map[string]interface{}{"key": key}
 
-    var respByKey struct {
-        Teams struct {
-            Nodes []Team `json:"nodes"`
-        } `json:"teams"`
-    }
+	var respByKey struct {
+		Teams struct {
+			Nodes []Team `json:"nodes"`
+		} `json:"teams"`
+	}
 
-    if err := c.Execute(ctx, queryByKey, variables, &respByKey); err == nil {
-        if len(respByKey.Teams.Nodes) > 0 {
-            t := respByKey.Teams.Nodes[0]
-            return &t, nil
-        }
-    }
+	keyErr := c.Execute(ctx, queryByKey, variables, &respByKey)
+	if keyErr == nil {
+		if len(respByKey.Teams.Nodes) > 0 {
+			t := respByKey.Teams.Nodes[0]
+			return &t, nil
+		}
+	}
 
-    // Fallback: try direct id lookup (in case caller passed an ID)
-    queryByID := `
+	// Fallback: try direct id lookup (in case caller passed an ID)
+	queryByID := `
         query TeamByID($id: String!) {
             team(id: $id) {
                 id
@@ -1268,14 +1269,24 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
         }
     `
 
-    var respByID struct {
-        Team *Team `json:"team"`
-    }
-    if err := c.Execute(ctx, queryByID, map[string]interface{}{"id": key}, &respByID); err == nil && respByID.Team != nil {
-        return respByID.Team, nil
-    }
+	var respByID struct {
+		Team *Team `json:"team"`
+	}
+	idErr := c.Execute(ctx, queryByID, map[string]interface{}{"id": key}, &respByID)
+	if idErr == nil && respByID.Team != nil {
+		return respByID.Team, nil
+	}
 
-    return nil, fmt.Errorf("team '%s' not found", key)
+	// If both lookups failed with errors, return the first error (key lookup)
+	// If key lookup succeeded but returned no results, and id lookup also failed, return the id error
+	if keyErr != nil {
+		return nil, fmt.Errorf("failed to fetch team '%s': %w", key, keyErr)
+	}
+	if idErr != nil {
+		return nil, fmt.Errorf("failed to fetch team '%s' by id: %w", key, idErr)
+	}
+
+	return nil, fmt.Errorf("team '%s' not found", key)
 }
 
 // Comment represents a Linear comment
@@ -1607,6 +1618,10 @@ func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}
 	err := c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
+	}
+
+	if !response.ProjectCreate.Success {
+		return nil, fmt.Errorf("project creation failed")
 	}
 
 	return &response.ProjectCreate.Project, nil
