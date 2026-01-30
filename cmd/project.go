@@ -863,7 +863,12 @@ Examples:
 		// Look up lead user ID
 		var leadID string
 		if leadEmail != "" {
-			user, err := client.(*api.Client).GetUser(context.Background(), leadEmail)
+			apiClient, ok := client.(*api.Client)
+			if !ok {
+				output.Error("internal error: API client does not support user lookup", plaintext, jsonOut)
+				os.Exit(1)
+			}
+			user, err := apiClient.GetUser(context.Background(), leadEmail)
 			if err != nil {
 				output.Error(fmt.Sprintf("Lead user not found with email '%s': %v", leadEmail, err), plaintext, jsonOut)
 				os.Exit(1)
@@ -1123,7 +1128,12 @@ Examples:
 		if cmd.Flags().Changed("lead") {
 			leadEmail, _ := cmd.Flags().GetString("lead")
 			if leadEmail != "" {
-				user, err := client.(*api.Client).GetUser(context.Background(), leadEmail)
+				apiClient, ok := client.(*api.Client)
+				if !ok {
+					output.Error("internal error: API client does not support user lookup", plaintext, jsonOut)
+					os.Exit(1)
+				}
+				user, err := apiClient.GetUser(context.Background(), leadEmail)
 				if err != nil {
 					output.Error(fmt.Sprintf("Lead user not found with email '%s': %v", leadEmail, err), plaintext, jsonOut)
 					os.Exit(1)
