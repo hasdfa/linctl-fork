@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/dorkitude/linctl/pkg/api"
@@ -14,6 +15,41 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+var uuidRegexp = regexp.MustCompile(`^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$`)
+
+func isValidUUID(s string) bool { return uuidRegexp.MatchString(s) }
+
+func isProjectNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	e := strings.ToLower(err.Error())
+	if !strings.Contains(e, "not found") {
+		return false
+	}
+	return strings.Contains(e, "project") || strings.Contains(e, "projectid")
+}
+
+// buildProjectInput normalizes a --project flag value to a GraphQL input value.
+// Returns (value, ok, err):
+// - ok=false means no input should be set (flag empty / not provided)
+// - value=nil with ok=true means explicitly unset (unassigned)
+// - value=string (uuid) with ok=true means assign to that project
+func buildProjectInput(projectFlag string) (interface{}, bool, error) {
+	trimmed := strings.TrimSpace(projectFlag)
+	switch trimmed {
+	case "":
+		return nil, false, nil
+	case "unassigned":
+		return nil, true, nil
+	default:
+		if !isValidUUID(trimmed) {
+			return nil, false, fmt.Errorf("invalid project ID format: %s", trimmed)
+		}
+		return trimmed, true, nil
+	}
+}
 
 // issueCmd represents the issue command
 var issueCmd = &cobra.Command{
@@ -111,6 +147,9 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 			if issue.Team != nil {
 				fmt.Printf("- **Team**: %s\n", issue.Team.Key)
 			}
+			if issue.Project != nil {
+				fmt.Printf("- **Project**: %s\n", issue.Project.Name)
+			}
 			fmt.Printf("- **Created**: %s\n", issue.CreatedAt.Format("2006-01-02"))
 			fmt.Printf("- **URL**: %s\n", issue.URL)
 			if issue.Description != "" {
@@ -122,7 +161,7 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 		return
 	}
 
-	headers := []string{"Title", "State", "Assignee", "Team", "Created", "URL"}
+	headers := []string{"Title", "State", "Assignee", "Team", "Project", "Created", "URL"}
 	rows := make([][]string, len(issues.Nodes))
 
 	for i, issue := range issues.Nodes {
@@ -134,6 +173,11 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 		team := ""
 		if issue.Team != nil {
 			team = issue.Team.Key
+		}
+
+		project := ""
+		if issue.Project != nil {
+			project = truncateString(issue.Project.Name, 25)
 		}
 
 		state := ""
@@ -168,6 +212,7 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 			state,
 			assignee,
 			team,
+			project,
 			issue.CreatedAt.Format("2006-01-02"),
 			issue.URL,
 		}
@@ -890,9 +935,31 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
+		// Handle project assignment
+		if cmd.Flags().Changed("project") {
+			projectID, _ := cmd.Flags().GetString("project")
+			if val, ok, err := buildProjectInput(projectID); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			} else if ok {
+				// For create, "unassigned" is equivalent to not setting project
+				if val != nil {
+					input["projectId"] = val
+				}
+			}
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
+			// Standardize project not-found error when a project was provided
+			if cmd.Flags().Changed("project") {
+				projectID, _ := cmd.Flags().GetString("project")
+				if projectID != "" && projectID != "unassigned" && isProjectNotFoundErr(err) {
+					output.Error(fmt.Sprintf("Project '%s' not found", projectID), plaintext, jsonOut)
+					os.Exit(1)
+				}
+			}
 			output.Error(fmt.Sprintf("Failed to create issue: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
@@ -901,6 +968,9 @@ var issueCreateCmd = &cobra.Command{
 			output.JSON(issue)
 		} else if plaintext {
 			fmt.Printf("Created issue %s: %s\n", issue.Identifier, issue.Title)
+			if issue.Project != nil {
+				fmt.Printf("Project: %s\n", issue.Project.Name)
+			}
 		} else {
 			fmt.Printf("%s Created issue %s: %s\n",
 				color.New(color.FgGreen).Sprint("✓"),
@@ -908,6 +978,9 @@ var issueCreateCmd = &cobra.Command{
 				issue.Title)
 			if issue.Assignee != nil {
 				fmt.Printf("  Assigned to: %s\n", color.New(color.FgCyan).Sprint(issue.Assignee.Name))
+			}
+			if issue.Project != nil {
+				fmt.Printf("  Project: %s\n", color.New(color.FgBlue).Sprint(issue.Project.Name))
 			}
 		}
 	},
@@ -1049,6 +1122,17 @@ Examples:
 			}
 		}
 
+		// Handle project assignment update
+		if cmd.Flags().Changed("project") {
+			projectID, _ := cmd.Flags().GetString("project")
+			if val, ok, err := buildProjectInput(projectID); err != nil {
+				output.Error(err.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			} else if ok {
+				input["projectId"] = val
+			}
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1058,6 +1142,14 @@ Examples:
 		// Update the issue
 		issue, err := client.UpdateIssue(context.Background(), args[0], input)
 		if err != nil {
+			// Standardize project not-found error when a project was provided
+			if cmd.Flags().Changed("project") {
+				projectID, _ := cmd.Flags().GetString("project")
+				if projectID != "" && projectID != "unassigned" && isProjectNotFoundErr(err) {
+					output.Error(fmt.Sprintf("Project '%s' not found", projectID), plaintext, jsonOut)
+					os.Exit(1)
+				}
+			}
 			output.Error(fmt.Sprintf("Failed to update issue: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
@@ -1108,6 +1200,7 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("project", "", "Project ID to assign issue to")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -1118,4 +1211,5 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().String("project", "", "Project ID to assign issue to (or 'unassigned' to remove)")
 }
