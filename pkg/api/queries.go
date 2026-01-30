@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -428,6 +429,10 @@ func (c *Client) GetIssues(ctx context.Context, filter map[string]interface{}, f
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -499,6 +504,10 @@ func (c *Client) IssueSearch(ctx context.Context, term string, filter map[string
 					team {
 						id
 						key
+						name
+					}
+					project {
+						id
 						name
 					}
 					labels {
@@ -1112,6 +1121,10 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -1174,6 +1187,10 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -1204,35 +1221,72 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 	return &response.IssueCreate.Issue, nil
 }
 
-// GetTeam returns a single team by key
+// GetTeam returns a single team by key; falls back to id lookup if not found
 func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
-	query := `
-		query Team($key: String!) {
-			team(id: $key) {
-				id
-				key
-				name
-				description
-				private
-				issueCount
-			}
+	// First, attempt lookup by team key via teams connection
+	queryByKey := `
+        query TeamByKey($key: String!) {
+            teams(filter: { key: { eq: $key } }, first: 1) {
+                nodes {
+                    id
+                    key
+                    name
+                    description
+                    private
+                    issueCount
+                }
+            }
+        }
+    `
+
+	variables := map[string]interface{}{"key": key}
+
+	var respByKey struct {
+		Teams struct {
+			Nodes []Team `json:"nodes"`
+		} `json:"teams"`
+	}
+
+	keyErr := c.Execute(ctx, queryByKey, variables, &respByKey)
+	if keyErr == nil {
+		if len(respByKey.Teams.Nodes) > 0 {
+			t := respByKey.Teams.Nodes[0]
+			return &t, nil
 		}
-	`
-
-	variables := map[string]interface{}{
-		"key": key,
 	}
 
-	var response struct {
-		Team Team `json:"team"`
+	// Fallback: try direct id lookup (in case caller passed an ID)
+	queryByID := `
+        query TeamByID($id: String!) {
+            team(id: $id) {
+                id
+                key
+                name
+                description
+                private
+                issueCount
+            }
+        }
+    `
+
+	var respByID struct {
+		Team *Team `json:"team"`
+	}
+	idErr := c.Execute(ctx, queryByID, map[string]interface{}{"id": key}, &respByID)
+	if idErr == nil && respByID.Team != nil {
+		return respByID.Team, nil
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
-	if err != nil {
-		return nil, err
+	// If both lookups failed with errors, return the first error (key lookup)
+	// If key lookup succeeded but returned no results, and id lookup also failed, return the id error
+	if keyErr != nil {
+		return nil, fmt.Errorf("failed to fetch team '%s': %w", key, keyErr)
+	}
+	if idErr != nil {
+		return nil, fmt.Errorf("failed to fetch team '%s' by id: %w", key, idErr)
 	}
 
-	return &response.Team, nil
+	return nil, fmt.Errorf("team '%s' not found", key)
 }
 
 // Comment represents a Linear comment
@@ -1512,4 +1566,97 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	}
 
 	return &response.CommentCreate.Comment, nil
+}
+
+// CreateProject creates a new project
+func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}) (*Project, error) {
+	query := `
+		mutation CreateProject($input: ProjectCreateInput!) {
+			projectCreate(input: $input) {
+				success
+				project {
+					id
+					name
+					description
+					state
+					progress
+					startDate
+					targetDate
+					url
+					icon
+					color
+					createdAt
+					updatedAt
+					lead {
+						id
+						name
+						email
+					}
+					teams {
+						nodes {
+							id
+							key
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		ProjectCreate struct {
+			Success bool    `json:"success"`
+			Project Project `json:"project"`
+		} `json:"projectCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	if !response.ProjectCreate.Success {
+		return nil, fmt.Errorf("project creation failed")
+	}
+
+	return &response.ProjectCreate.Project, nil
+}
+
+// ArchiveProject archives a project by ID
+func (c *Client) ArchiveProject(ctx context.Context, id string) (bool, error) {
+	query := `
+		mutation ArchiveProject($id: String!) {
+			projectArchive(id: $id) {
+				success
+				project {
+					id
+					name
+					archivedAt
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		ProjectArchive struct {
+			Success bool    `json:"success"`
+			Project Project `json:"project"`
+		} `json:"projectArchive"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return false, err
+	}
+
+	return response.ProjectArchive.Success, nil
 }
