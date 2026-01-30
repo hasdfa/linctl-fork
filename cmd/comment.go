@@ -19,11 +19,15 @@ import (
 var commentCmd = &cobra.Command{
 	Use:   "comment",
 	Short: "Manage issue comments",
-	Long: `Manage comments on Linear issues including listing and creating comments.
+	Long: `Manage comments on Linear issues including listing, creating, and deleting comments.
 
 Examples:
-  linctl comment list LIN-123        # List comments for an issue
-  linctl comment create LIN-123 --body "This is fixed"  # Add a comment`,
+  linctl comment list LIN-123                           # List comments for an issue
+  linctl comment ls LIN-123                             # List comments (alias)
+  linctl comment create LIN-123 --body "This is fixed"  # Add a comment
+  linctl comment delete <comment-id>                    # Delete a comment
+  linctl comment rm <comment-id>                        # Delete a comment (alias)
+  linctl comment remove <comment-id>                    # Delete a comment (alias)`,
 }
 
 var commentListCmd = &cobra.Command{
@@ -173,7 +177,7 @@ var commentCreateCmd = &cobra.Command{
 
 var commentDeleteCmd = &cobra.Command{
 	Use:     "delete COMMENT-ID",
-	Aliases: []string{"rm"},
+	Aliases: []string{"rm", "remove"},
 	Short:   "Delete a comment",
 	Long:    `Delete a comment by its ID.`,
 	Args:    cobra.ExactArgs(1),
@@ -182,12 +186,14 @@ var commentDeleteCmd = &cobra.Command{
 		jsonOut := viper.GetBool("json")
 		commentID := args[0]
 
+		// Get auth header
 		authHeader, err := auth.GetAuthHeader()
 		if err != nil {
 			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
+		// Create API client
 		client := api.NewClient(authHeader)
 
 		err = client.DeleteComment(context.Background(), commentID)
@@ -196,10 +202,19 @@ var commentDeleteCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Handle output
 		if jsonOut {
-			output.JSON(map[string]interface{}{"success": true, "deleted": commentID})
+			output.JSON(map[string]interface{}{
+				"status":    "success",
+				"commentId": commentID,
+				"message":   "Comment deleted successfully",
+			})
+		} else if plaintext {
+			fmt.Printf("Deleted comment %s\n", commentID)
 		} else {
-			fmt.Printf("✓ Deleted comment %s\n", commentID)
+			fmt.Printf("%s Deleted comment %s\n",
+				color.New(color.FgGreen).Sprint("✓"),
+				color.New(color.FgCyan).Sprint(commentID))
 		}
 	},
 }

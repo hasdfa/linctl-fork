@@ -1754,7 +1754,7 @@ func (c *Client) DeleteComment(ctx context.Context, commentID string) error {
 	}
 
 	if !response.CommentDelete.Success {
-		return fmt.Errorf("failed to delete comment")
+		return fmt.Errorf("comment %s could not be deleted", commentID)
 	}
 
 	return nil
