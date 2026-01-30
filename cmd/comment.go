@@ -79,6 +79,18 @@ var commentListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Filter out child comments if --no-children flag is set
+		noChildren, _ := cmd.Flags().GetBool("no-children")
+		if noChildren {
+			var rootComments []api.Comment
+			for _, comment := range comments.Nodes {
+				if comment.Parent == nil || comment.Parent.ID == "" {
+					rootComments = append(rootComments, comment)
+				}
+			}
+			comments.Nodes = rootComments
+		}
+
 		// Handle output
 		if jsonOut {
 			output.JSON(comments.Nodes)
@@ -287,6 +299,7 @@ func init() {
 	// List command flags
 	commentListCmd.Flags().IntP("limit", "l", 50, "Maximum number of comments to return")
 	commentListCmd.Flags().StringP("sort", "o", "linear", "Sort order: linear (default), created, updated")
+	commentListCmd.Flags().Bool("no-children", false, "Only show root comments (skip comments that have a parent)")
 
 	// Create command flags
 	commentCreateCmd.Flags().StringP("body", "b", "", "Comment body (required)")

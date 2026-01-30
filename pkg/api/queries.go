@@ -1645,10 +1645,54 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 						body
 						createdAt
 						updatedAt
+						editedAt
 						user {
 							id
 							name
 							email
+							avatarUrl
+						}
+						parent {
+							id
+							body
+							createdAt
+							updatedAt
+							editedAt
+							user {
+								id
+								name
+								email
+							}
+							parent {
+								id
+							}
+							children {
+								nodes {
+									id
+								}
+								pageInfo {
+									hasNextPage
+									endCursor
+								}
+							}
+						}
+						children {
+							nodes {
+								id
+								body
+								createdAt
+								updatedAt
+								editedAt
+								user {
+									id
+									name
+									email
+								}
+							}
+							pageInfo {
+								hasNextPage
+								endCursor
+							}
 						}
 					}
 					pageInfo {
