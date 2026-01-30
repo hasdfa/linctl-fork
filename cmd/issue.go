@@ -1110,7 +1110,8 @@ Examples:
 		// Handle parent update
 		if cmd.Flags().Changed("parent") {
 			parentValue, _ := cmd.Flags().GetString("parent")
-			normalizedValue := strings.ToLower(strings.TrimSpace(parentValue))
+			trimmedValue := strings.TrimSpace(parentValue)
+			normalizedValue := strings.ToLower(trimmedValue)
 
 			switch normalizedValue {
 			case "none", "null", "":
@@ -1118,9 +1119,11 @@ Examples:
 				input["parentId"] = nil
 			default:
 				// Validate that the parent issue exists
-				parentIssue, err := client.GetIssue(context.Background(), parentValue)
+				// TODO: Consider using a lightweight API query that only fetches the parent's
+				// id/identifier for validation, rather than fetching the full issue payload.
+				parentIssue, err := client.GetIssue(context.Background(), trimmedValue)
 				if err != nil {
-					output.Error(fmt.Sprintf("Failed to find parent issue '%s': %v", parentValue, err), plaintext, jsonOut)
+					output.Error(fmt.Sprintf("Failed to find parent issue '%s': %v", trimmedValue, err), plaintext, jsonOut)
 					os.Exit(1)
 				}
 
