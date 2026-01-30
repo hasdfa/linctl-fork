@@ -141,9 +141,12 @@ linctl issue update LIN-123 --state "In Progress"
 linctl issue update LIN-123 --priority 1  # 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
 linctl issue update LIN-123 --due-date "2024-12-31"
 linctl issue update LIN-123 --due-date ""  # Remove due date
+linctl issue update LIN-123 --parent LIN-456  # Set parent issue
+linctl issue update LIN-123 --parent none  # Remove parent (also accepts 'null' or empty string)
 
 # Update multiple fields at once
 linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1
+linctl issue update LIN-123 --parent LIN-456 --title "Sub-task" --assignee me
 ```
 
 ### 3. Project Management
@@ -260,6 +263,7 @@ linctl issue edit <issue-id> [flags]    # Alias
   -s, --state string       State name (e.g., 'Todo', 'In Progress', 'Done')
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
+  --parent string          Parent issue ID/identifier (or 'none' to remove parent)
 
 # Archive issue (coming soon)
 linctl issue archive <issue-id>
@@ -445,6 +449,28 @@ Authentication credentials are stored securely in `~/.linctl-auth.json`.
 2. Create a new Personal API Key
 3. Run `linctl auth` and paste your key
 
+### Temporary Override (Current Session)
+
+You can temporarily override your stored credentials using the `LINCTL_API_KEY` environment variable. This is useful for:
+- CI/CD pipelines
+- Testing with a different account
+- Running one-off commands without changing your stored credentials
+
+```bash
+# Override for a single command
+LINCTL_API_KEY="lin_api_..." linctl issue list
+
+# Override for the current shell session
+export LINCTL_API_KEY="lin_api_..."
+linctl issue list
+linctl whoami  # Shows the user for the env var token
+
+# Clear the override
+unset LINCTL_API_KEY
+```
+
+**Precedence:** Environment variable > Config file (`~/.linctl-auth.json`)
+
 ## 📅 Time-based Filtering
 
 **⚠️ Default Behavior**: To improve performance and prevent overwhelming data loads, list commands **only show items created in the last 6 months by default**. This is especially important for large workspaces.
@@ -619,6 +645,13 @@ linctl team members ENG --json | jq '. | length'
 
 # Export issue comments
 linctl comment list LIN-123 --json > issue-comments.json
+
+# Set up parent-child issue relationships
+linctl issue update LIN-124 --parent LIN-123  # Make LIN-124 a sub-issue of LIN-123
+linctl issue update LIN-125 --parent LIN-123  # Make LIN-125 also a sub-issue
+
+# Remove parent-child relationships
+linctl issue update LIN-124 --parent none
 ```
 
 ## 📡 Real-World Examples

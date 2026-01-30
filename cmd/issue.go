@@ -498,7 +498,7 @@ var issueGetCmd = &cobra.Command{
 			if issue.Comments != nil && len(issue.Comments.Nodes) > 0 {
 				fmt.Printf("\n## Recent Comments\n")
 				for _, comment := range issue.Comments.Nodes {
-					fmt.Printf("\n### %s - %s\n", comment.User.Name, comment.CreatedAt.Format("2006-01-02 15:04"))
+					fmt.Printf("\n### %s - %s\n", commentAuthorName(&comment), comment.CreatedAt.Format("2006-01-02 15:04"))
 					if comment.EditedAt != nil {
 						fmt.Printf("*(edited %s)*\n", comment.EditedAt.Format("2006-01-02 15:04"))
 					}
@@ -682,7 +682,7 @@ var issueGetCmd = &cobra.Command{
 			fmt.Printf("\n%s\n", color.New(color.FgYellow).Sprint("Recent Comments:"))
 			for _, comment := range issue.Comments.Nodes {
 				fmt.Printf("  💬 %s - %s\n",
-					color.New(color.FgCyan).Sprint(comment.User.Name),
+					color.New(color.FgCyan).Sprint(commentAuthorName(&comment)),
 					color.New(color.FgWhite, color.Faint).Sprint(comment.CreatedAt.Format("2006-01-02 15:04")))
 				// Show first line of comment
 				lines := strings.Split(comment.Body, "\n")
@@ -890,6 +890,46 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
+		// Handle delegate
+		delegate, _ := cmd.Flags().GetString("delegate")
+		if delegate != "" {
+			delegateUser, err := client.FindUserByIdentifier(context.Background(), delegate)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to find delegate user: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["delegateId"] = delegateUser.ID
+		}
+
+		// Handle labels
+		labelNames, _ := cmd.Flags().GetStringSlice("label")
+		if len(labelNames) > 0 {
+			// Get team labels
+			teamLabels, err := client.GetTeamLabels(context.Background(), teamKey)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to get team labels: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			// Build map for case-insensitive lookup
+			labelMap := make(map[string]string)
+			for _, label := range teamLabels {
+				labelMap[strings.ToLower(label.Name)] = label.ID
+			}
+
+			// Look up label IDs
+			var labelIds []string
+			for _, name := range labelNames {
+				id, ok := labelMap[strings.ToLower(name)]
+				if !ok {
+					output.Error(fmt.Sprintf("Label not found: %s", name), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				labelIds = append(labelIds, id)
+			}
+			input["labelIds"] = labelIds
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
@@ -925,6 +965,9 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
+  linctl issue update LIN-123 --parent LIN-100     # Make sub-issue of LIN-100
+  linctl issue update LIN-123 --parent none        # Remove parent (promote to top-level)
+  linctl issue update LIN-123 --delegate agent-name
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -938,6 +981,20 @@ Examples:
 		}
 
 		client := api.NewClient(authHeader)
+
+		// Lazy-fetch current issue to avoid redundant API calls across flag handlers
+		var cachedIssue *api.Issue
+		getCurrentIssue := func() (*api.Issue, error) {
+			if cachedIssue != nil {
+				return cachedIssue, nil
+			}
+			issue, err := client.GetIssue(context.Background(), args[0])
+			if err != nil {
+				return nil, err
+			}
+			cachedIssue = issue
+			return cachedIssue, nil
+		}
 
 		// Build update input
 		input := make(map[string]interface{})
@@ -993,12 +1050,27 @@ Examples:
 			}
 		}
 
+		// Handle delegate update
+		if cmd.Flags().Changed("delegate") {
+			delegate, _ := cmd.Flags().GetString("delegate")
+			if delegate == "" || delegate == "none" {
+				input["delegateId"] = nil
+			} else {
+				delegateUser, err := client.FindUserByIdentifier(context.Background(), delegate)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to find delegate user: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				input["delegateId"] = delegateUser.ID
+			}
+		}
+
 		// Handle state update
 		if cmd.Flags().Changed("state") {
 			stateName, _ := cmd.Flags().GetString("state")
 
-			// First, get the issue to know which team it belongs to
-			issue, err := client.GetIssue(context.Background(), args[0])
+			// Get the issue to know which team it belongs to
+			issue, err := getCurrentIssue()
 			if err != nil {
 				output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
 				os.Exit(1)
@@ -1049,6 +1121,43 @@ Examples:
 			}
 		}
 
+		// Handle parent update
+		if cmd.Flags().Changed("parent") {
+			parentValue, _ := cmd.Flags().GetString("parent")
+			trimmedValue := strings.TrimSpace(parentValue)
+			normalizedValue := strings.ToLower(trimmedValue)
+
+			switch normalizedValue {
+			case "none", "null", "":
+				// Remove parent relationship (promote to top-level issue)
+				input["parentId"] = nil
+			default:
+				// Validate that the parent issue exists
+				// TODO: Consider using a lightweight API query that only fetches the parent's
+				// id/identifier for validation, rather than fetching the full issue payload.
+				parentIssue, err := client.GetIssue(context.Background(), trimmedValue)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to find parent issue '%s': %v", trimmedValue, err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				// Prevent self-referencing by comparing canonical IDs
+				// We fetch the current issue to get both its UUID and identifier for proper comparison,
+				// since the user might pass either format for args[0]
+				currentIssue, err := getCurrentIssue()
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to get current issue: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				if parentIssue.ID == currentIssue.ID {
+					output.Error("An issue cannot be its own parent", plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				input["parentId"] = parentIssue.ID
+			}
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1066,8 +1175,17 @@ Examples:
 			output.JSON(issue)
 		} else if plaintext {
 			fmt.Printf("Updated issue %s\n", issue.Identifier)
+			if issue.Parent != nil {
+				fmt.Printf("Parent: %s - %s\n", issue.Parent.Identifier, issue.Parent.Title)
+			}
 		} else {
 			output.Success(fmt.Sprintf("Updated issue %s", issue.Identifier), plaintext, jsonOut)
+			if issue.Parent != nil {
+				fmt.Printf("  %s Parent: %s - %s\n",
+					color.New(color.FgBlue).Sprint("↳"),
+					color.New(color.FgCyan).Sprint(issue.Parent.Identifier),
+					issue.Parent.Title)
+			}
 		}
 	},
 }
@@ -1108,6 +1226,8 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, or displayName)")
+	issueCreateCmd.Flags().StringSlice("label", []string{}, "Label name(s) to apply (can be repeated)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -1118,4 +1238,6 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none', 'null', or empty to remove parent)")
+	issueUpdateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, displayName, or 'none' to remove)")
 }
