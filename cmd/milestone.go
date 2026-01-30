@@ -306,8 +306,11 @@ func runMilestoneUpdate(cmd *cobra.Command, client milestoneAPI, milestoneID str
 				output.Error("Invalid --target-date format. Expected YYYY-MM-DD", plaintext, jsonOut)
 				os.Exit(1)
 			}
+			input["targetDate"] = targetDate
+		} else {
+			// Explicitly clear the target date when an empty string is provided
+			input["targetDate"] = nil
 		}
-		input["targetDate"] = targetDate
 	}
 
 	// Validate at least one field provided
