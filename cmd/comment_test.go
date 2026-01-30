@@ -90,8 +90,14 @@ func TestCommentDeleteCommandExists(t *testing.T) {
 	}
 
 	// Check aliases
-	if len(commentDeleteCmd.Aliases) != 1 || commentDeleteCmd.Aliases[0] != "rm" {
-		t.Errorf("Expected alias 'rm', got %v", commentDeleteCmd.Aliases)
+	expectedAliases := []string{"rm", "remove"}
+	if len(commentDeleteCmd.Aliases) != len(expectedAliases) {
+		t.Errorf("Expected %d aliases, got %d: %v", len(expectedAliases), len(commentDeleteCmd.Aliases), commentDeleteCmd.Aliases)
+	}
+	for i, alias := range expectedAliases {
+		if commentDeleteCmd.Aliases[i] != alias {
+			t.Errorf("Expected alias '%s' at index %d, got '%s'", alias, i, commentDeleteCmd.Aliases[i])
+		}
 	}
 }
 
@@ -129,5 +135,76 @@ func TestCommentListFlags(t *testing.T) {
 	}
 	if sortFlag.Shorthand != "o" {
 		t.Errorf("Expected shorthand 'o', got '%s'", sortFlag.Shorthand)
+	}
+
+	// Check no-children flag
+	noChildrenFlag := commentListCmd.Flags().Lookup("no-children")
+	if noChildrenFlag == nil {
+		t.Fatal("commentListCmd should have --no-children flag")
+	}
+	if noChildrenFlag.DefValue != "false" {
+		t.Errorf("Expected default value 'false', got '%s'", noChildrenFlag.DefValue)
+	}
+}
+
+func TestCommentResolveCommandExists(t *testing.T) {
+	if commentResolveCmd == nil {
+		t.Fatal("commentResolveCmd should not be nil")
+	}
+
+	if commentResolveCmd.Use != "resolve COMMENT-ID" {
+		t.Errorf("Expected Use 'resolve COMMENT-ID', got '%s'", commentResolveCmd.Use)
+	}
+
+	if commentResolveCmd.Short != "Resolve a comment thread" {
+		t.Errorf("Expected Short 'Resolve a comment thread', got '%s'", commentResolveCmd.Short)
+	}
+}
+
+func TestCommentResolveRequiresOneArg(t *testing.T) {
+	err := commentResolveCmd.Args(commentResolveCmd, []string{})
+	if err == nil {
+		t.Error("Expected error with 0 args")
+	}
+
+	err = commentResolveCmd.Args(commentResolveCmd, []string{"comment-123"})
+	if err != nil {
+		t.Errorf("Expected no error with 1 arg, got: %v", err)
+	}
+
+	err = commentResolveCmd.Args(commentResolveCmd, []string{"comment-123", "extra"})
+	if err == nil {
+		t.Error("Expected error with 2 args")
+	}
+}
+
+func TestCommentUnresolveCommandExists(t *testing.T) {
+	if commentUnresolveCmd == nil {
+		t.Fatal("commentUnresolveCmd should not be nil")
+	}
+
+	if commentUnresolveCmd.Use != "unresolve COMMENT-ID" {
+		t.Errorf("Expected Use 'unresolve COMMENT-ID', got '%s'", commentUnresolveCmd.Use)
+	}
+
+	if commentUnresolveCmd.Short != "Unresolve a comment thread" {
+		t.Errorf("Expected Short 'Unresolve a comment thread', got '%s'", commentUnresolveCmd.Short)
+	}
+}
+
+func TestCommentUnresolveRequiresOneArg(t *testing.T) {
+	err := commentUnresolveCmd.Args(commentUnresolveCmd, []string{})
+	if err == nil {
+		t.Error("Expected error with 0 args")
+	}
+
+	err = commentUnresolveCmd.Args(commentUnresolveCmd, []string{"comment-123"})
+	if err != nil {
+		t.Errorf("Expected no error with 1 arg, got: %v", err)
+	}
+
+	err = commentUnresolveCmd.Args(commentUnresolveCmd, []string{"comment-123", "extra"})
+	if err == nil {
+		t.Error("Expected error with 2 args")
 	}
 }
