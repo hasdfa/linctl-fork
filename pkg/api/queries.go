@@ -1384,15 +1384,18 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
 
 // Comment represents a Linear comment
 type Comment struct {
-	ID           string        `json:"id"`
-	Body         string        `json:"body"`
-	CreatedAt    time.Time     `json:"createdAt"`
-	UpdatedAt    time.Time     `json:"updatedAt"`
-	EditedAt     *time.Time    `json:"editedAt"`
-	User         *User         `json:"user"`
-	Parent       *Comment      `json:"parent"`
-	Children     *Comments     `json:"children"`
-	AgentSession *AgentSession `json:"agentSession"`
+	ID               string        `json:"id"`
+	Body             string        `json:"body"`
+	CreatedAt        time.Time     `json:"createdAt"`
+	UpdatedAt        time.Time     `json:"updatedAt"`
+	EditedAt         *time.Time    `json:"editedAt"`
+	ResolvedAt       *time.Time    `json:"resolvedAt"`
+	User             *User         `json:"user"`
+	ResolvingUser    *User         `json:"resolvingUser"`
+	ResolvingComment *Comment      `json:"resolvingComment"`
+	Parent           *Comment      `json:"parent"`
+	Children         *Comments     `json:"children"`
+	AgentSession     *AgentSession `json:"agentSession"`
 }
 
 // Comments represents a paginated list of comments
@@ -1841,4 +1844,105 @@ func (c *Client) MentionAgent(ctx context.Context, issueID string, agentDisplayN
 	}
 
 	return comment.ID, nil
+}
+
+// ResolveComment marks a comment thread as resolved by the current user.
+// It uses the commentUpdate mutation with resolvingUserId set to the current user.
+func (c *Client) ResolveComment(ctx context.Context, commentID string) (*Comment, error) {
+	// First, get the current user to set as the resolver
+	viewer, err := c.GetViewer(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	query := `
+		mutation ResolveComment($id: String!, $input: CommentUpdateInput!) {
+			commentUpdate(id: $id, input: $input) {
+				comment {
+					id
+					body
+					createdAt
+					updatedAt
+					resolvedAt
+					user {
+						id
+						name
+						email
+					}
+					resolvingUser {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": commentID,
+		"input": map[string]interface{}{
+			"resolvingUserId": viewer.ID,
+		},
+	}
+
+	var response struct {
+		CommentUpdate struct {
+			Comment Comment `json:"comment"`
+		} `json:"commentUpdate"`
+	}
+
+	err = c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.CommentUpdate.Comment, nil
+}
+
+// UnresolveComment removes the resolved status from a comment thread.
+func (c *Client) UnresolveComment(ctx context.Context, commentID string) (*Comment, error) {
+	query := `
+		mutation UnresolveComment($id: String!, $input: CommentUpdateInput!) {
+			commentUpdate(id: $id, input: $input) {
+				comment {
+					id
+					body
+					createdAt
+					updatedAt
+					resolvedAt
+					user {
+						id
+						name
+						email
+					}
+					resolvingUser {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": commentID,
+		"input": map[string]interface{}{
+			"resolvingUserId": nil,
+		},
+	}
+
+	var response struct {
+		CommentUpdate struct {
+			Comment Comment `json:"comment"`
+		} `json:"commentUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.CommentUpdate.Comment, nil
 }
