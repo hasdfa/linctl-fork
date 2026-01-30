@@ -965,6 +965,8 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
+  linctl issue update LIN-123 --parent LIN-100     # Make sub-issue of LIN-100
+  linctl issue update LIN-123 --parent none        # Remove parent (promote to top-level)
   linctl issue update LIN-123 --delegate agent-name
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
@@ -979,6 +981,20 @@ Examples:
 		}
 
 		client := api.NewClient(authHeader)
+
+		// Lazy-fetch current issue to avoid redundant API calls across flag handlers
+		var cachedIssue *api.Issue
+		getCurrentIssue := func() (*api.Issue, error) {
+			if cachedIssue != nil {
+				return cachedIssue, nil
+			}
+			issue, err := client.GetIssue(context.Background(), args[0])
+			if err != nil {
+				return nil, err
+			}
+			cachedIssue = issue
+			return cachedIssue, nil
+		}
 
 		// Build update input
 		input := make(map[string]interface{})
@@ -1053,8 +1069,8 @@ Examples:
 		if cmd.Flags().Changed("state") {
 			stateName, _ := cmd.Flags().GetString("state")
 
-			// First, get the issue to know which team it belongs to
-			issue, err := client.GetIssue(context.Background(), args[0])
+			// Get the issue to know which team it belongs to
+			issue, err := getCurrentIssue()
 			if err != nil {
 				output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
 				os.Exit(1)
@@ -1105,6 +1121,43 @@ Examples:
 			}
 		}
 
+		// Handle parent update
+		if cmd.Flags().Changed("parent") {
+			parentValue, _ := cmd.Flags().GetString("parent")
+			trimmedValue := strings.TrimSpace(parentValue)
+			normalizedValue := strings.ToLower(trimmedValue)
+
+			switch normalizedValue {
+			case "none", "null", "":
+				// Remove parent relationship (promote to top-level issue)
+				input["parentId"] = nil
+			default:
+				// Validate that the parent issue exists
+				// TODO: Consider using a lightweight API query that only fetches the parent's
+				// id/identifier for validation, rather than fetching the full issue payload.
+				parentIssue, err := client.GetIssue(context.Background(), trimmedValue)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to find parent issue '%s': %v", trimmedValue, err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				// Prevent self-referencing by comparing canonical IDs
+				// We fetch the current issue to get both its UUID and identifier for proper comparison,
+				// since the user might pass either format for args[0]
+				currentIssue, err := getCurrentIssue()
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to get current issue: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				if parentIssue.ID == currentIssue.ID {
+					output.Error("An issue cannot be its own parent", plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				input["parentId"] = parentIssue.ID
+			}
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1122,8 +1175,17 @@ Examples:
 			output.JSON(issue)
 		} else if plaintext {
 			fmt.Printf("Updated issue %s\n", issue.Identifier)
+			if issue.Parent != nil {
+				fmt.Printf("Parent: %s - %s\n", issue.Parent.Identifier, issue.Parent.Title)
+			}
 		} else {
 			output.Success(fmt.Sprintf("Updated issue %s", issue.Identifier), plaintext, jsonOut)
+			if issue.Parent != nil {
+				fmt.Printf("  %s Parent: %s - %s\n",
+					color.New(color.FgBlue).Sprint("↳"),
+					color.New(color.FgCyan).Sprint(issue.Parent.Identifier),
+					issue.Parent.Title)
+			}
 		}
 	},
 }
@@ -1176,5 +1238,6 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none', 'null', or empty to remove parent)")
 	issueUpdateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, displayName, or 'none' to remove)")
 }

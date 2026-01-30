@@ -1261,6 +1261,11 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 							color
 						}
 					}
+					parent {
+						id
+						identifier
+						title
+					}
 				}
 			}
 		}
