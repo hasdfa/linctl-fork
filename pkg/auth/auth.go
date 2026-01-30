@@ -76,7 +76,7 @@ func loadAuth() (*AuthConfig, error) {
 // Precedence: LINCTL_API_KEY env var > config file
 func GetAuthHeader() (string, error) {
 	// Check environment variable first (useful for CI/CD or temporary overrides)
-	if envKey := os.Getenv("LINCTL_API_KEY"); envKey != "" {
+	if envKey := strings.TrimSpace(os.Getenv("LINCTL_API_KEY")); envKey != "" {
 		return envKey, nil
 	}
 
