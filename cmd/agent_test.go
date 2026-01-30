@@ -48,4 +48,3 @@ func TestAgentMentionRequiresTwoArgs(t *testing.T) {
 		t.Error("Expected error with 3 args")
 	}
 }
-
