@@ -73,7 +73,7 @@ func loadAuth() (*AuthConfig, error) {
 }
 
 // GetAuthHeader returns the authorization header value
-// Precedence: LINCTL_API_KEY env var > config file
+// Precedence: LINEAR_API_KEY env var > LINCTL_API_KEY env var > config file
 func GetAuthHeader() (string, error) {
 	if apiKey := strings.TrimSpace(os.Getenv("LINEAR_API_KEY")); apiKey != "" {
 		return apiKey, nil

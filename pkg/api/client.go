@@ -15,9 +15,10 @@ const (
 )
 
 type Client struct {
-	httpClient *http.Client
-	authHeader string
-	baseURL    string
+	httpClient   *http.Client
+	authHeader   string
+	baseURL      string
+	cachedViewer *User // cached current user to avoid repeated API calls
 }
 
 type GraphQLRequest struct {
