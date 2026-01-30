@@ -35,14 +35,14 @@ A comprehensive command-line interface for Linear's API, built with agents in mi
 
 ### Homebrew (macOS/Linux)
 ```bash
-brew tap dorkitude/linctl
-brew install linctl
+brew tap hasdfa/linctl
+brew install hasdfa/linctl/linctl
 linctl docs      # Render the README.md
 ```
 
 ### From Source
 ```bash
-git clone https://github.com/dorkitude/linctl.git
+git clone https://github.com/hasdfa/linctl.git
 cd linctl
 make deps        # Install dependencies
 make build       # Build the binary
@@ -52,7 +52,7 @@ linctl docs      # Render the README.md
 
 ### For Development
 ```bash
-git clone https://github.com/dorkitude/linctl.git
+git clone https://github.com/hasdfa/linctl.git
 cd linctl
 make deps        # Install dependencies
 go run main.go   # Run directly without building
@@ -770,8 +770,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🔗 Links
 
 - [Linear API Documentation](https://developers.linear.app/)
-- [GitHub Repository](https://github.com/dorkitude/linctl)
-- [Issue Tracker](https://github.com/dorkitude/linctl/issues)
+- [GitHub Repository](https://github.com/hasdfa/linctl)
+- [Issue Tracker](https://github.com/hasdfa/linctl/issues)
 
 ---
 
