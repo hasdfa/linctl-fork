@@ -1127,9 +1127,15 @@ Examples:
 					os.Exit(1)
 				}
 
-				// Prevent self-referencing
-				currentIssueID := args[0]
-				if parentIssue.Identifier == currentIssueID || parentIssue.ID == currentIssueID {
+				// Prevent self-referencing by comparing canonical IDs
+				// We fetch the current issue to get both its UUID and identifier for proper comparison,
+				// since the user might pass either format for args[0]
+				currentIssue, err := client.GetIssue(context.Background(), args[0])
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to get current issue: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				if parentIssue.ID == currentIssue.ID {
 					output.Error("An issue cannot be its own parent", plaintext, jsonOut)
 					os.Exit(1)
 				}
