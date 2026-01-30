@@ -23,8 +23,11 @@ var commentCmd = &cobra.Command{
 
 Examples:
   linctl comment list LIN-123                           # List comments for an issue
+  linctl comment ls LIN-123                             # List comments (alias)
   linctl comment create LIN-123 --body "This is fixed"  # Add a comment
-  linctl comment delete <comment-id>                    # Delete a comment`,
+  linctl comment delete <comment-id>                    # Delete a comment
+  linctl comment rm <comment-id>                        # Delete a comment (alias)
+  linctl comment remove <comment-id>                    # Delete a comment (alias)`,
 }
 
 var commentListCmd = &cobra.Command{
@@ -203,7 +206,7 @@ var commentDeleteCmd = &cobra.Command{
 		// Handle output
 		if jsonOut {
 			output.JSON(map[string]interface{}{
-				"success":   true,
+				"status":    "success",
 				"commentId": commentID,
 				"message":   "Comment deleted successfully",
 			})
