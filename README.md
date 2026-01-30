@@ -170,7 +170,7 @@ linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1
 
 # Link a GitHub PR to an issue
 linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
-linctl issue attach LIN-123 --pr 456  # If in a GitHub repo directory
+linctl issue attach LIN-123 --pr 456  # Detects repo from git remote origin
 
 # Attach any URL to an issue
 linctl issue attach LIN-123 --url https://example.com/design --title "Design Mockup"
@@ -239,7 +239,7 @@ linctl comment create LIN-123 --body "Fixed the authentication bug"
 # Link a GitHub PR to an issue
 linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
 
-# Use PR number (if running in a GitHub repo directory)
+# Use PR number (detects repo from git remote origin)
 linctl issue attach LIN-123 --pr 456
 
 # Attach any external URL
@@ -331,7 +331,7 @@ linctl issue attach <issue-id> [flags]
 
 # Examples:
 linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
-linctl issue attach LIN-123 --pr 456  # In a git repo directory
+linctl issue attach LIN-123 --pr 456  # Detects repo from git remote origin
 linctl issue attach LIN-123 --url https://figma.com/file/abc --title "Design Mockup"
 linctl issue attach LIN-123 --url https://example.com --title "Spec" --subtitle "v2.0"
 ```

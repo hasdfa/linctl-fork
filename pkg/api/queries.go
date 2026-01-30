@@ -1569,7 +1569,9 @@ func (c *Client) CreateAttachment(ctx context.Context, input map[string]interfac
 	}
 
 	if !response.AttachmentCreate.Success {
-		return nil, fmt.Errorf("failed to create attachment")
+		// Include input details in error message for debugging
+		inputJSON, _ := json.Marshal(input)
+		return nil, fmt.Errorf("failed to create attachment (success=false), input: %s", string(inputJSON))
 	}
 
 	return &response.AttachmentCreate.Attachment, nil

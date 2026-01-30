@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/charlietran/linctl/pkg/api"
@@ -772,8 +774,15 @@ func buildIssueFilter(cmd *cobra.Command) map[string]interface{} {
 			// Filter for issues in the current active cycle
 			filter["cycle"] = map[string]interface{}{"isActive": map[string]interface{}{"eq": true}}
 		} else {
-			// Filter by specific cycle number
-			filter["cycle"] = map[string]interface{}{"number": map[string]interface{}{"eq": cycle}}
+			// Filter by specific cycle number - parse to int since Linear's Cycle.number is an integer
+			cycleNum, err := strconv.Atoi(cycle)
+			if err != nil {
+				plaintext := viper.GetBool("plaintext")
+				jsonOut := viper.GetBool("json")
+				output.Error(fmt.Sprintf("Invalid cycle value '%s': must be 'current' or a number", cycle), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			filter["cycle"] = map[string]interface{}{"number": map[string]interface{}{"eq": cycleNum}}
 		}
 	}
 
@@ -1120,7 +1129,15 @@ Examples:
 		// Handle labels update
 		if cmd.Flags().Changed("labels") {
 			labelIDs, _ := cmd.Flags().GetStringSlice("labels")
-			input["labelIds"] = labelIDs
+			// Filter out empty strings to handle --labels "" for clearing labels
+			var filteredLabelIDs []string
+			for _, id := range labelIDs {
+				if id != "" {
+					filteredLabelIDs = append(filteredLabelIDs, id)
+				}
+			}
+			// Use empty slice to clear labels, or the filtered list to set labels
+			input["labelIds"] = filteredLabelIDs
 		}
 
 		// Check if any updates were specified
@@ -1200,7 +1217,11 @@ Examples:
 
 		// Handle GitHub PR attachment
 		if prFlag != "" {
-			prURL, prTitle, prSubtitle := buildGitHubPRAttachment(prFlag)
+			prURL, prTitle, prSubtitle, prErr := buildGitHubPRAttachment(prFlag)
+			if prErr != nil {
+				output.Error(prErr.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			}
 			input["url"] = prURL
 			if titleFlag != "" {
 				input["title"] = titleFlag
@@ -1257,26 +1278,81 @@ Examples:
 	},
 }
 
-// buildGitHubPRAttachment constructs PR URL, title, and subtitle from various input formats
-func buildGitHubPRAttachment(prInput string) (url, title, subtitle string) {
+// buildGitHubPRAttachment constructs PR URL, title, and subtitle from various input formats.
+// Returns an error if numeric PR input is provided without being in a git repo with a GitHub remote.
+func buildGitHubPRAttachment(prInput string) (url, title, subtitle string, err error) {
 	// Check if it's already a full URL
 	if strings.HasPrefix(prInput, "http://") || strings.HasPrefix(prInput, "https://") {
+		// Clean URL: remove trailing slashes and query parameters
+		cleanURL := prInput
+		if idx := strings.Index(cleanURL, "?"); idx != -1 {
+			cleanURL = cleanURL[:idx]
+		}
+		cleanURL = strings.TrimSuffix(cleanURL, "/")
+
 		// Parse GitHub PR URL (expected format: https://github.com/owner/repo/pull/123)
-		parts := strings.Split(prInput, "/")
+		parts := strings.Split(cleanURL, "/")
 		if len(parts) >= 7 && parts[2] == "github.com" && parts[5] == "pull" {
 			owner := parts[3]
 			repo := parts[4]
 			prNumber := parts[6]
-			return prInput, fmt.Sprintf("PR #%s", prNumber), fmt.Sprintf("%s/%s", owner, repo)
+			return cleanURL, fmt.Sprintf("PR #%s", prNumber), fmt.Sprintf("%s/%s", owner, repo), nil
 		}
-		return prInput, "GitHub PR", ""
+		return prInput, "GitHub PR", "", nil
 	}
 
-	// Just a PR number - construct a basic URL
-	// Future enhancement: detect repo from git remote or gh CLI
-	return fmt.Sprintf("https://github.com/pr/%s", prInput),
-		fmt.Sprintf("PR #%s", prInput),
-		""
+	// Just a PR number - try to detect repo from git remote
+	repoURL, detectErr := detectGitHubRepoFromGit()
+	if detectErr != nil {
+		return "", "", "", fmt.Errorf("cannot use PR number without full URL: %w. Please provide the full GitHub PR URL (e.g., https://github.com/owner/repo/pull/%s)", detectErr, prInput)
+	}
+
+	// Build full PR URL from detected repo
+	prURL := fmt.Sprintf("%s/pull/%s", repoURL, prInput)
+	// Extract owner/repo for subtitle
+	parts := strings.Split(repoURL, "/")
+	var repoSubtitle string
+	if len(parts) >= 2 {
+		repoSubtitle = fmt.Sprintf("%s/%s", parts[len(parts)-2], parts[len(parts)-1])
+	}
+
+	return prURL, fmt.Sprintf("PR #%s", prInput), repoSubtitle, nil
+}
+
+// detectGitHubRepoFromGit attempts to detect a GitHub repository URL from the current git directory.
+func detectGitHubRepoFromGit() (string, error) {
+	// Try to get the remote URL using git
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository or no 'origin' remote configured")
+	}
+
+	remoteURL := strings.TrimSpace(string(output))
+
+	// Parse various git URL formats
+	// SSH: git@github.com:owner/repo.git
+	// HTTPS: https://github.com/owner/repo.git
+	// HTTPS: https://github.com/owner/repo
+
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		// SSH format: git@github.com:owner/repo.git
+		path := strings.TrimPrefix(remoteURL, "git@github.com:")
+		path = strings.TrimSuffix(path, ".git")
+		return "https://github.com/" + path, nil
+	}
+
+	if strings.Contains(remoteURL, "github.com") {
+		// HTTPS format
+		url := strings.TrimSuffix(remoteURL, ".git")
+		// Ensure it starts with https://
+		if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+			url = "https://" + url
+		}
+		return url, nil
+	}
+
+	return "", fmt.Errorf("remote 'origin' is not a GitHub repository")
 }
 
 func init() {
