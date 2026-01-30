@@ -431,6 +431,22 @@ func (c *Client) GetViewer(ctx context.Context) (*User, error) {
 	return &response.Viewer, nil
 }
 
+// GetViewerCached returns the current authenticated user, using a cached value if available.
+// This avoids repeated API calls when the viewer information is needed multiple times.
+func (c *Client) GetViewerCached(ctx context.Context) (*User, error) {
+	if c.cachedViewer != nil {
+		return c.cachedViewer, nil
+	}
+
+	viewer, err := c.GetViewer(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	c.cachedViewer = viewer
+	return viewer, nil
+}
+
 // GetOrganization returns the current organization/workspace
 func (c *Client) GetOrganization(ctx context.Context) (*Organization, error) {
 	query := `
@@ -1848,9 +1864,10 @@ func (c *Client) MentionAgent(ctx context.Context, issueID string, agentDisplayN
 
 // ResolveComment marks a comment thread as resolved by the current user.
 // It uses the commentUpdate mutation with resolvingUserId set to the current user.
+// The current user is cached to avoid repeated API calls when resolving multiple comments.
 func (c *Client) ResolveComment(ctx context.Context, commentID string) (*Comment, error) {
-	// First, get the current user to set as the resolver
-	viewer, err := c.GetViewer(ctx)
+	// Get the current user (cached to avoid repeated API calls)
+	viewer, err := c.GetViewerCached(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current user: %w", err)
 	}

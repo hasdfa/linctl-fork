@@ -81,7 +81,11 @@ var commentListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Filter out child comments if --no-children flag is set
+		// Filter out child comments if --no-children flag is set.
+		// Note: This filtering is performed client-side after fetching all comments.
+		// The Linear API doesn't support server-side filtering by parent status,
+		// so all comments are fetched and filtered locally. This is acceptable for
+		// most use cases but may be less efficient for issues with many nested comments.
 		noChildren, _ := cmd.Flags().GetBool("no-children")
 		if noChildren {
 			var rootComments []api.Comment

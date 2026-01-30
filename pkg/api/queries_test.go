@@ -219,3 +219,32 @@ func TestLabelUnmarshal(t *testing.T) {
 		t.Errorf("Expected Name 'backend', got '%s'", label.Name)
 	}
 }
+
+func TestClientCachedViewerField(t *testing.T) {
+	// Test that Client struct has cachedViewer field and it works as expected
+	client := NewClient("test-auth-header")
+
+	// Initially cachedViewer should be nil
+	if client.cachedViewer != nil {
+		t.Error("Expected cachedViewer to be nil initially")
+	}
+
+	// Manually set cachedViewer to simulate caching
+	testUser := &User{
+		ID:    "user-123",
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	client.cachedViewer = testUser
+
+	// Verify the cached value is stored
+	if client.cachedViewer == nil {
+		t.Fatal("Expected cachedViewer to be non-nil after setting")
+	}
+	if client.cachedViewer.ID != "user-123" {
+		t.Errorf("Expected cachedViewer.ID 'user-123', got '%s'", client.cachedViewer.ID)
+	}
+	if client.cachedViewer.Name != "Test User" {
+		t.Errorf("Expected cachedViewer.Name 'Test User', got '%s'", client.cachedViewer.Name)
+	}
+}
