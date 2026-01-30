@@ -1685,8 +1685,13 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 	return &response.Issue.Comments, nil
 }
 
-// CreateComment creates a new comment on an issue
-func (c *Client) CreateComment(ctx context.Context, issueID string, body string) (*Comment, error) {
+// CreateComment creates a new comment on an issue.
+// The optional parentID parameter can be used to create a threaded reply under an existing comment.
+// Usage:
+//
+//	CreateComment(ctx, issueID, body)           // top-level comment
+//	CreateComment(ctx, issueID, body, parentID) // threaded reply
+func (c *Client) CreateComment(ctx context.Context, issueID string, body string, parentID ...string) (*Comment, error) {
 	query := `
 		mutation CreateComment($input: CommentCreateInput!) {
 			commentCreate(input: $input) {
@@ -1700,6 +1705,9 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 						name
 						email
 					}
+					parent {
+						id
+					}
 				}
 			}
 		}
@@ -1708,6 +1716,11 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	input := map[string]interface{}{
 		"issueId": issueID,
 		"body":    body,
+	}
+
+	// Add parentId if provided for threaded replies
+	if len(parentID) > 0 && parentID[0] != "" {
+		input["parentId"] = parentID[0]
 	}
 
 	variables := map[string]interface{}{
