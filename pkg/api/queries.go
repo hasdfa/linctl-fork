@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -1512,4 +1513,36 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	}
 
 	return &response.CommentCreate.Comment, nil
+}
+
+// DeleteComment deletes a comment by ID
+func (c *Client) DeleteComment(ctx context.Context, commentID string) error {
+	query := `
+		mutation DeleteComment($id: String!) {
+			commentDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": commentID,
+	}
+
+	var response struct {
+		CommentDelete struct {
+			Success bool `json:"success"`
+		} `json:"commentDelete"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+
+	if !response.CommentDelete.Success {
+		return fmt.Errorf("comment deletion was not successful")
+	}
+
+	return nil
 }

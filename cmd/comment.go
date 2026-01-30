@@ -19,11 +19,12 @@ import (
 var commentCmd = &cobra.Command{
 	Use:   "comment",
 	Short: "Manage issue comments",
-	Long: `Manage comments on Linear issues including listing and creating comments.
+	Long: `Manage comments on Linear issues including listing, creating, and deleting comments.
 
 Examples:
-  linctl comment list LIN-123        # List comments for an issue
-  linctl comment create LIN-123 --body "This is fixed"  # Add a comment`,
+  linctl comment list LIN-123                           # List comments for an issue
+  linctl comment create LIN-123 --body "This is fixed"  # Add a comment
+  linctl comment delete <comment-id>                    # Delete a comment`,
 }
 
 var commentListCmd = &cobra.Command{
@@ -171,6 +172,51 @@ var commentCreateCmd = &cobra.Command{
 	},
 }
 
+var commentDeleteCmd = &cobra.Command{
+	Use:     "delete COMMENT-ID",
+	Aliases: []string{"rm", "remove"},
+	Short:   "Delete a comment",
+	Long:    `Delete a comment by its ID.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		commentID := args[0]
+
+		// Get auth header
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Create API client
+		client := api.NewClient(authHeader)
+
+		// Delete comment
+		err = client.DeleteComment(context.Background(), commentID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to delete comment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Handle output
+		if jsonOut {
+			output.JSON(map[string]interface{}{
+				"success":   true,
+				"commentId": commentID,
+				"message":   "Comment deleted successfully",
+			})
+		} else if plaintext {
+			fmt.Printf("Deleted comment %s\n", commentID)
+		} else {
+			fmt.Printf("%s Deleted comment %s\n",
+				color.New(color.FgGreen).Sprint("✓"),
+				color.New(color.FgCyan).Sprint(commentID))
+		}
+	},
+}
+
 // formatTimeAgo formats a time as a human-readable "time ago" string
 func formatTimeAgo(t time.Time) string {
 	duration := time.Since(t)
@@ -214,6 +260,7 @@ func init() {
 	rootCmd.AddCommand(commentCmd)
 	commentCmd.AddCommand(commentListCmd)
 	commentCmd.AddCommand(commentCreateCmd)
+	commentCmd.AddCommand(commentDeleteCmd)
 
 	// List command flags
 	commentListCmd.Flags().IntP("limit", "l", 50, "Maximum number of comments to return")
