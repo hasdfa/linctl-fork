@@ -124,8 +124,14 @@ var commentCreateCmd = &cobra.Command{
 	Use:     "create ISSUE-ID",
 	Aliases: []string{"add", "new"},
 	Short:   "Create a comment on an issue",
-	Long:    `Add a new comment to a specific issue.`,
-	Args:    cobra.ExactArgs(1),
+	Long: `Add a new comment to a specific issue.
+
+Use the --parent flag to create a threaded reply under an existing comment.
+
+Examples:
+  linctl comment create LIN-123 --body "This is a top-level comment"
+  linctl comment create LIN-123 --body "This is a reply" --parent COMMENT-ID`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -148,8 +154,11 @@ var commentCreateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Get optional parent ID for threaded replies
+		parentID, _ := cmd.Flags().GetString("parent")
+
 		// Create comment
-		comment, err := client.CreateComment(context.Background(), issueID, body)
+		comment, err := client.CreateComment(context.Background(), issueID, body, parentID)
 		if err != nil {
 			output.Error(fmt.Sprintf("Failed to create comment: %v", err), plaintext, jsonOut)
 			os.Exit(1)
@@ -160,12 +169,22 @@ var commentCreateCmd = &cobra.Command{
 			output.JSON(comment)
 		} else if plaintext {
 			fmt.Printf("Created comment on %s\n", issueID)
+			fmt.Printf("ID: %s\n", comment.ID)
 			fmt.Printf("Author: %s\n", comment.User.Name)
 			fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
+			if parentID != "" {
+				fmt.Printf("Parent: %s\n", parentID)
+			}
 		} else {
-			fmt.Printf("%s Added comment to %s\n",
-				color.New(color.FgGreen).Sprint("✓"),
-				color.New(color.FgCyan, color.Bold).Sprint(issueID))
+			if parentID != "" {
+				fmt.Printf("%s Added reply to comment on %s\n",
+					color.New(color.FgGreen).Sprint("✓"),
+					color.New(color.FgCyan, color.Bold).Sprint(issueID))
+			} else {
+				fmt.Printf("%s Added comment to %s\n",
+					color.New(color.FgGreen).Sprint("✓"),
+					color.New(color.FgCyan, color.Bold).Sprint(issueID))
+			}
 			fmt.Printf("\n%s\n", comment.Body)
 		}
 	},
@@ -221,5 +240,6 @@ func init() {
 
 	// Create command flags
 	commentCreateCmd.Flags().StringP("body", "b", "", "Comment body (required)")
+	commentCreateCmd.Flags().String("parent", "", "Parent comment ID for threaded replies")
 	_ = commentCreateCmd.MarkFlagRequired("body")
 }
