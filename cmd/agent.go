@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/dorkitude/linctl/pkg/api"
 	"github.com/dorkitude/linctl/pkg/auth"
@@ -13,6 +14,40 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+// truncateRuneSafe safely truncates a string to maxRunes runes, adding suffix if truncated.
+// This handles multi-byte UTF-8 characters correctly, unlike byte-based truncation.
+func truncateRuneSafe(s string, maxRunes int, suffix string) string {
+	if utf8.RuneCountInString(s) <= maxRunes {
+		return s
+	}
+	runes := []rune(s)
+	suffixRunes := utf8.RuneCountInString(suffix)
+	if maxRunes <= suffixRunes {
+		return suffix
+	}
+	return string(runes[:maxRunes-suffixRunes]) + suffix
+}
+
+// mapAgentActivityType maps GraphQL __typename to user-friendly activity type names
+func mapAgentActivityType(typename string) string {
+	switch typename {
+	case "AgentActivityThoughtContent":
+		return "thought"
+	case "AgentActivityResponseContent":
+		return "response"
+	case "AgentActivityActionContent":
+		return "action"
+	case "AgentActivityErrorContent":
+		return "error"
+	case "AgentActivityElicitationContent":
+		return "elicitation"
+	case "AgentActivityPromptContent":
+		return "prompt"
+	default:
+		return "unknown"
+	}
+}
 
 var agentCmd = &cobra.Command{
 	Use:   "agent [issue-id]",
@@ -91,8 +126,8 @@ Examples:
 					for _, activity := range session.Activities.Nodes {
 						activityType := "unknown"
 						body := ""
-						if t, ok := activity.Content["type"].(string); ok {
-							activityType = t
+						if t, ok := activity.Content["__typename"].(string); ok {
+							activityType = mapAgentActivityType(t)
 						}
 						if b, ok := activity.Content["body"].(string); ok {
 							body = b
@@ -165,8 +200,8 @@ Examples:
 			for _, activity := range session.Activities.Nodes {
 				activityType := "unknown"
 				body := ""
-				if t, ok := activity.Content["type"].(string); ok {
-					activityType = t
+				if t, ok := activity.Content["__typename"].(string); ok {
+					activityType = mapAgentActivityType(t)
 				}
 				// Get body or action+parameter depending on type
 				if b, ok := activity.Content["body"].(string); ok {
@@ -196,9 +231,8 @@ Examples:
 					// Indent body text
 					lines := strings.Split(body, "\n")
 					for _, line := range lines {
-						if len(line) > 80 {
-							line = line[:77] + "..."
-						}
+						// Use rune-safe truncation to handle UTF-8 characters correctly
+						line = truncateRuneSafe(line, 80, "...")
 						fmt.Printf("    %s\n", line)
 					}
 				}

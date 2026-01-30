@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -924,12 +925,12 @@ func (c *Client) GetIssueAgentSession(ctx context.Context, issueId string) (*Iss
 									createdAt
 									ephemeral
 									content {
-										... on AgentActivityThoughtContent { type body }
-										... on AgentActivityResponseContent { type body }
-										... on AgentActivityActionContent { type action parameter }
-										... on AgentActivityErrorContent { type body }
-										... on AgentActivityElicitationContent { type body }
-										... on AgentActivityPromptContent { type body }
+										... on AgentActivityThoughtContent { __typename body }
+										... on AgentActivityResponseContent { __typename body }
+										... on AgentActivityActionContent { __typename action parameter }
+										... on AgentActivityErrorContent { __typename body }
+										... on AgentActivityElicitationContent { __typename body }
+										... on AgentActivityPromptContent { __typename body }
 									}
 								}
 								pageInfo {
@@ -1603,17 +1604,26 @@ func (c *Client) GetUser(ctx context.Context, email string) (*User, error) {
 	return &response.User, nil
 }
 
-// FindUserByIdentifier finds a user by email, name, or displayName
+// FindUserByIdentifier finds a user by email, name, or displayName.
+// Uses pagination to search through all users in the workspace.
 func (c *Client) FindUserByIdentifier(ctx context.Context, identifier string) (*User, error) {
-	users, err := c.GetUsers(ctx, 100, "", "")
-	if err != nil {
-		return nil, err
-	}
-
-	for _, user := range users.Nodes {
-		if user.Email == identifier || user.Name == identifier || user.DisplayName == identifier {
-			return &user, nil
+	var cursor string
+	for {
+		users, err := c.GetUsers(ctx, 100, cursor, "")
+		if err != nil {
+			return nil, err
 		}
+
+		for _, user := range users.Nodes {
+			if user.Email == identifier || user.Name == identifier || user.DisplayName == identifier {
+				return &user, nil
+			}
+		}
+
+		if !users.PageInfo.HasNextPage {
+			break
+		}
+		cursor = users.PageInfo.EndCursor
 	}
 
 	return nil, fmt.Errorf("user not found: %s", identifier)
@@ -1745,7 +1755,10 @@ func (c *Client) DeleteComment(ctx context.Context, commentID string) error {
 	return nil
 }
 
-// MentionAgent @mentions an agent in a comment to trigger them
+// MentionAgent @mentions an agent in a comment to trigger them.
+// TODO: The mention format using profile URLs may not be the correct way to trigger
+// Linear agents. Linear typically uses @username mentions in markdown. This should
+// be verified against Linear's actual mention API specification and updated accordingly.
 func (c *Client) MentionAgent(ctx context.Context, issueID string, agentDisplayName string, message string) (string, error) {
 	// Get workspace slug from organization
 	org, err := c.GetOrganization(ctx)
@@ -1755,7 +1768,9 @@ func (c *Client) MentionAgent(ctx context.Context, issueID string, agentDisplayN
 
 	// Create a comment that @mentions the agent using Linear URL format
 	// Format: https://linear.app/workspace/profiles/displayname
-	mentionURL := fmt.Sprintf("https://linear.app/%s/profiles/%s", org.URLKey, agentDisplayName)
+	// URL-encode the display name to handle spaces and special characters
+	encodedDisplayName := url.PathEscape(agentDisplayName)
+	mentionURL := fmt.Sprintf("https://linear.app/%s/profiles/%s", org.URLKey, encodedDisplayName)
 	mentionMessage := fmt.Sprintf("%s\n\n%s", mentionURL, message)
 
 	comment, err := c.CreateComment(ctx, issueID, mentionMessage)
