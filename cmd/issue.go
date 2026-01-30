@@ -498,7 +498,7 @@ var issueGetCmd = &cobra.Command{
 			if issue.Comments != nil && len(issue.Comments.Nodes) > 0 {
 				fmt.Printf("\n## Recent Comments\n")
 				for _, comment := range issue.Comments.Nodes {
-					fmt.Printf("\n### %s - %s\n", comment.User.Name, comment.CreatedAt.Format("2006-01-02 15:04"))
+					fmt.Printf("\n### %s - %s\n", commentAuthorName(&comment), comment.CreatedAt.Format("2006-01-02 15:04"))
 					if comment.EditedAt != nil {
 						fmt.Printf("*(edited %s)*\n", comment.EditedAt.Format("2006-01-02 15:04"))
 					}
@@ -682,7 +682,7 @@ var issueGetCmd = &cobra.Command{
 			fmt.Printf("\n%s\n", color.New(color.FgYellow).Sprint("Recent Comments:"))
 			for _, comment := range issue.Comments.Nodes {
 				fmt.Printf("  💬 %s - %s\n",
-					color.New(color.FgCyan).Sprint(comment.User.Name),
+					color.New(color.FgCyan).Sprint(commentAuthorName(&comment)),
 					color.New(color.FgWhite, color.Faint).Sprint(comment.CreatedAt.Format("2006-01-02 15:04")))
 				// Show first line of comment
 				lines := strings.Split(comment.Body, "\n")
@@ -890,6 +890,46 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
+		// Handle delegate
+		delegate, _ := cmd.Flags().GetString("delegate")
+		if delegate != "" {
+			delegateUser, err := client.FindUserByIdentifier(context.Background(), delegate)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to find delegate user: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["delegateId"] = delegateUser.ID
+		}
+
+		// Handle labels
+		labelNames, _ := cmd.Flags().GetStringSlice("label")
+		if len(labelNames) > 0 {
+			// Get team labels
+			teamLabels, err := client.GetTeamLabels(context.Background(), teamKey)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to get team labels: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			// Build map for case-insensitive lookup
+			labelMap := make(map[string]string)
+			for _, label := range teamLabels {
+				labelMap[strings.ToLower(label.Name)] = label.ID
+			}
+
+			// Look up label IDs
+			var labelIds []string
+			for _, name := range labelNames {
+				id, ok := labelMap[strings.ToLower(name)]
+				if !ok {
+					output.Error(fmt.Sprintf("Label not found: %s", name), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				labelIds = append(labelIds, id)
+			}
+			input["labelIds"] = labelIds
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
@@ -927,6 +967,7 @@ Examples:
   linctl issue update LIN-123 --due-date "2024-12-31"
   linctl issue update LIN-123 --parent LIN-100     # Make sub-issue of LIN-100
   linctl issue update LIN-123 --parent none        # Remove parent (promote to top-level)
+  linctl issue update LIN-123 --delegate agent-name
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -992,6 +1033,21 @@ Examples:
 				}
 
 				input["assigneeId"] = foundUser.ID
+			}
+		}
+
+		// Handle delegate update
+		if cmd.Flags().Changed("delegate") {
+			delegate, _ := cmd.Flags().GetString("delegate")
+			if delegate == "" || delegate == "none" {
+				input["delegateId"] = nil
+			} else {
+				delegateUser, err := client.FindUserByIdentifier(context.Background(), delegate)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to find delegate user: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				input["delegateId"] = delegateUser.ID
 			}
 		}
 
@@ -1150,6 +1206,8 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, or displayName)")
+	issueCreateCmd.Flags().StringSlice("label", []string{}, "Label name(s) to apply (can be repeated)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -1161,4 +1219,5 @@ func init() {
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
 	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none' to remove parent)")
+	issueUpdateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, displayName, or 'none' to remove)")
 }

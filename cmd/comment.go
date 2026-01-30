@@ -83,7 +83,7 @@ var commentListCmd = &cobra.Command{
 				if i > 0 {
 					fmt.Println("---")
 				}
-				fmt.Printf("Author: %s\n", comment.User.Name)
+				fmt.Printf("Author: %s\n", commentAuthorName(&comment))
 				fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
 				fmt.Printf("Comment:\n%s\n", comment.Body)
 			}
@@ -109,7 +109,7 @@ var commentListCmd = &cobra.Command{
 				// Header with author and time
 				timeAgo := formatTimeAgo(comment.CreatedAt)
 				fmt.Printf("%s %s %s\n",
-					color.New(color.FgCyan, color.Bold).Sprint(comment.User.Name),
+					color.New(color.FgCyan, color.Bold).Sprint(commentAuthorName(&comment)),
 					color.New(color.FgWhite, color.Faint).Sprint("•"),
 					color.New(color.FgWhite, color.Faint).Sprint(timeAgo))
 
@@ -160,13 +160,46 @@ var commentCreateCmd = &cobra.Command{
 			output.JSON(comment)
 		} else if plaintext {
 			fmt.Printf("Created comment on %s\n", issueID)
-			fmt.Printf("Author: %s\n", comment.User.Name)
+			fmt.Printf("Author: %s\n", commentAuthorName(comment))
 			fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
 		} else {
 			fmt.Printf("%s Added comment to %s\n",
 				color.New(color.FgGreen).Sprint("✓"),
 				color.New(color.FgCyan, color.Bold).Sprint(issueID))
 			fmt.Printf("\n%s\n", comment.Body)
+		}
+	},
+}
+
+var commentDeleteCmd = &cobra.Command{
+	Use:     "delete COMMENT-ID",
+	Aliases: []string{"rm"},
+	Short:   "Delete a comment",
+	Long:    `Delete a comment by its ID.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		commentID := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+
+		err = client.DeleteComment(context.Background(), commentID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to delete comment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(map[string]interface{}{"success": true, "deleted": commentID})
+		} else {
+			fmt.Printf("✓ Deleted comment %s\n", commentID)
 		}
 	},
 }
@@ -214,6 +247,7 @@ func init() {
 	rootCmd.AddCommand(commentCmd)
 	commentCmd.AddCommand(commentListCmd)
 	commentCmd.AddCommand(commentCreateCmd)
+	commentCmd.AddCommand(commentDeleteCmd)
 
 	// List command flags
 	commentListCmd.Flags().IntP("limit", "l", 50, "Maximum number of comments to return")
