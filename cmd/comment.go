@@ -172,11 +172,11 @@ Examples:
 			fmt.Printf("ID: %s\n", comment.ID)
 			fmt.Printf("Author: %s\n", comment.User.Name)
 			fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
-			if parentID != "" {
-				fmt.Printf("Parent: %s\n", parentID)
+			if comment.Parent != nil && comment.Parent.ID != "" {
+				fmt.Printf("Parent: %s\n", comment.Parent.ID)
 			}
 		} else {
-			if parentID != "" {
+			if comment.Parent != nil && comment.Parent.ID != "" {
 				fmt.Printf("%s Added reply to comment on %s\n",
 					color.New(color.FgGreen).Sprint("✓"),
 					color.New(color.FgCyan, color.Bold).Sprint(issueID))
@@ -185,6 +185,7 @@ Examples:
 					color.New(color.FgGreen).Sprint("✓"),
 					color.New(color.FgCyan, color.Bold).Sprint(issueID))
 			}
+			fmt.Printf("ID: %s\n", color.New(color.FgWhite, color.Faint).Sprint(comment.ID))
 			fmt.Printf("\n%s\n", comment.Body)
 		}
 	},
