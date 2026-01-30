@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 
-	"github.com/dorkitude/linctl/pkg/api"
-	"github.com/dorkitude/linctl/pkg/auth"
-	"github.com/dorkitude/linctl/pkg/output"
-	"github.com/dorkitude/linctl/pkg/utils"
+	"github.com/charlietran/linctl/pkg/api"
+	"github.com/charlietran/linctl/pkg/auth"
+	"github.com/charlietran/linctl/pkg/output"
+	"github.com/charlietran/linctl/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -24,6 +26,8 @@ var issueCmd = &cobra.Command{
 Examples:
   linctl issue list --assignee me --state "In Progress"
   linctl issue ls -a me -s "In Progress"
+  linctl issue list --cycle current  # Show issues in current active cycle
+  linctl issue list --cycle 42  # Show issues in cycle 42
   linctl issue list --include-completed  # Show all issues including completed
   linctl issue list --newer-than 3_weeks_ago  # Show issues from last 3 weeks
   linctl issue search "login bug" --team ENG
@@ -35,7 +39,14 @@ var issueListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List issues",
-	Long:    `List Linear issues with optional filtering.`,
+	Long: `List Linear issues with optional filtering.
+
+Examples:
+  linctl issue list --assignee me
+  linctl issue list --state "In Progress" --team ENG
+  linctl issue list --cycle current  # Filter by current active cycle
+  linctl issue list --cycle 42  # Filter by specific cycle number
+  linctl issue list --priority 1 --cycle current  # Urgent issues in current cycle`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -111,6 +122,13 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 			if issue.Team != nil {
 				fmt.Printf("- **Team**: %s\n", issue.Team.Key)
 			}
+			if issue.Cycle != nil {
+				if issue.Cycle.Name != "" {
+					fmt.Printf("- **Cycle**: %s\n", issue.Cycle.Name)
+				} else if issue.Cycle.Number > 0 {
+					fmt.Printf("- **Cycle**: Cycle %d\n", issue.Cycle.Number)
+				}
+			}
 			fmt.Printf("- **Created**: %s\n", issue.CreatedAt.Format("2006-01-02"))
 			fmt.Printf("- **URL**: %s\n", issue.URL)
 			if issue.Description != "" {
@@ -122,7 +140,7 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 		return
 	}
 
-	headers := []string{"Title", "State", "Assignee", "Team", "Created", "URL"}
+	headers := []string{"Title", "State", "Assignee", "Team", "Cycle", "Created", "URL"}
 	rows := make([][]string, len(issues.Nodes))
 
 	for i, issue := range issues.Nodes {
@@ -134,6 +152,15 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 		team := ""
 		if issue.Team != nil {
 			team = issue.Team.Key
+		}
+
+		cycle := "-"
+		if issue.Cycle != nil {
+			if issue.Cycle.Name != "" {
+				cycle = issue.Cycle.Name
+			} else if issue.Cycle.Number > 0 {
+				cycle = fmt.Sprintf("Cycle %d", issue.Cycle.Number)
+			}
 		}
 
 		state := ""
@@ -168,6 +195,7 @@ func renderIssueCollection(issues *api.Issues, plaintext, jsonOut bool, emptyMes
 			state,
 			assignee,
 			team,
+			cycle,
 			issue.CreatedAt.Format("2006-01-02"),
 			issue.URL,
 		}
@@ -200,6 +228,8 @@ var issueSearchCmd = &cobra.Command{
 Examples:
   linctl issue search "payment outage"
   linctl issue search "auth token" --team ENG --include-completed
+  linctl issue search "login" --cycle current  # Search in current cycle
+  linctl issue search "bug" --cycle 42  # Search in specific cycle
   linctl issue search "customer:" --json`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -738,6 +768,24 @@ func buildIssueFilter(cmd *cobra.Command) map[string]interface{} {
 		filter["priority"] = map[string]interface{}{"eq": priority}
 	}
 
+	// Handle cycle filter
+	if cycle, _ := cmd.Flags().GetString("cycle"); cycle != "" {
+		if cycle == "current" {
+			// Filter for issues in the current active cycle
+			filter["cycle"] = map[string]interface{}{"isActive": map[string]interface{}{"eq": true}}
+		} else {
+			// Filter by specific cycle number - parse to int since Linear's Cycle.number is an integer
+			cycleNum, err := strconv.Atoi(cycle)
+			if err != nil {
+				plaintext := viper.GetBool("plaintext")
+				jsonOut := viper.GetBool("json")
+				output.Error(fmt.Sprintf("Invalid cycle value '%s': must be 'current' or a number", cycle), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			filter["cycle"] = map[string]interface{}{"number": map[string]interface{}{"eq": cycleNum}}
+		}
+	}
+
 	// Handle newer-than filter
 	newerThan, _ := cmd.Flags().GetString("newer-than")
 	createdAt, err := utils.ParseTimeExpression(newerThan)
@@ -830,7 +878,14 @@ var issueCreateCmd = &cobra.Command{
 	Use:     "create",
 	Aliases: []string{"new"},
 	Short:   "Create a new issue",
-	Long:    `Create a new issue in Linear.`,
+	Long: `Create a new issue in Linear.
+
+Examples:
+  linctl issue create --title "Bug fix" --team ENG
+  linctl issue create --title "Feature request" --team ENG --description "Add dark mode"
+  linctl issue create --title "Task" --team ENG --priority 1 --assign-me
+  linctl issue create --title "Task" --team ENG --project <PROJECT-ID>
+  linctl issue create --title "Bug" --team ENG --labels "bug,urgent"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -849,6 +904,8 @@ var issueCreateCmd = &cobra.Command{
 		teamKey, _ := cmd.Flags().GetString("team")
 		priority, _ := cmd.Flags().GetInt("priority")
 		assignToMe, _ := cmd.Flags().GetBool("assign-me")
+		projectID, _ := cmd.Flags().GetString("project")
+		labelIDs, _ := cmd.Flags().GetStringSlice("labels")
 
 		if title == "" {
 			output.Error("Title is required (--title)", plaintext, jsonOut)
@@ -890,6 +947,14 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
+		if projectID != "" {
+			input["projectId"] = projectID
+		}
+
+		if len(labelIDs) > 0 {
+			input["labelIds"] = labelIDs
+		}
+
 		// Handle delegate
 		delegate, _ := cmd.Flags().GetString("delegate")
 		if delegate != "" {
@@ -901,7 +966,7 @@ var issueCreateCmd = &cobra.Command{
 			input["delegateId"] = delegateUser.ID
 		}
 
-		// Handle labels
+		// Handle labels by name (alternative to --labels with IDs)
 		labelNames, _ := cmd.Flags().GetStringSlice("label")
 		if len(labelNames) > 0 {
 			// Get team labels
@@ -949,6 +1014,16 @@ var issueCreateCmd = &cobra.Command{
 			if issue.Assignee != nil {
 				fmt.Printf("  Assigned to: %s\n", color.New(color.FgCyan).Sprint(issue.Assignee.Name))
 			}
+			if issue.Project != nil {
+				fmt.Printf("  Project: %s\n", color.New(color.FgCyan).Sprint(issue.Project.Name))
+			}
+			if issue.Labels != nil && len(issue.Labels.Nodes) > 0 {
+				labelNames := []string{}
+				for _, label := range issue.Labels.Nodes {
+					labelNames = append(labelNames, label.Name)
+				}
+				fmt.Printf("  Labels: %s\n", color.New(color.FgCyan).Sprint(strings.Join(labelNames, ", ")))
+			}
 		}
 	},
 }
@@ -965,6 +1040,8 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
+  linctl issue update LIN-123 --labels <ID1>,<ID2>
+  linctl issue update LIN-123 --labels ""  # Clear all labels
   linctl issue update LIN-123 --parent LIN-100     # Make sub-issue of LIN-100
   linctl issue update LIN-123 --parent none        # Remove parent (promote to top-level)
   linctl issue update LIN-123 --delegate agent-name
@@ -1121,6 +1198,20 @@ Examples:
 			}
 		}
 
+		// Handle labels update
+		if cmd.Flags().Changed("labels") {
+			labelIDs, _ := cmd.Flags().GetStringSlice("labels")
+			// Filter out empty strings to handle --labels "" for clearing labels
+			var filteredLabelIDs []string
+			for _, id := range labelIDs {
+				if id != "" {
+					filteredLabelIDs = append(filteredLabelIDs, id)
+				}
+			}
+			// Use empty slice to clear labels, or the filtered list to set labels
+			input["labelIds"] = filteredLabelIDs
+		}
+
 		// Handle parent update
 		if cmd.Flags().Changed("parent") {
 			parentValue, _ := cmd.Flags().GetString("parent")
@@ -1190,6 +1281,198 @@ Examples:
 	},
 }
 
+var issueAttachCmd = &cobra.Command{
+	Use:   "attach [issue-id]",
+	Short: "Attach a resource to an issue",
+	Long: `Attach external resources like GitHub PRs, URLs, or images to a Linear issue.
+
+Examples:
+  linctl issue attach LIN-123 --pr 456
+  linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
+  linctl issue attach LIN-123 --url https://example.com --title "Design Mockup"
+  linctl issue attach LIN-123 --url https://example.com --title "Spec" --subtitle "Updated 2024"`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error("Not authenticated. Run 'linctl auth' first.", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+
+		// Get issue to verify it exists and get its ID
+		issue, err := client.GetIssue(context.Background(), args[0])
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to fetch issue: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Build attachment input
+		input := map[string]interface{}{
+			"issueId": issue.ID,
+		}
+
+		// Handle PR flag
+		prFlag, _ := cmd.Flags().GetString("pr")
+		urlFlag, _ := cmd.Flags().GetString("url")
+		titleFlag, _ := cmd.Flags().GetString("title")
+		subtitleFlag, _ := cmd.Flags().GetString("subtitle")
+		iconURLFlag, _ := cmd.Flags().GetString("icon-url")
+
+		if prFlag != "" && urlFlag != "" {
+			output.Error("Cannot specify both --pr and --url", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if prFlag == "" && urlFlag == "" {
+			output.Error("Must specify either --pr or --url", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Handle GitHub PR attachment
+		if prFlag != "" {
+			prURL, prTitle, prSubtitle, prErr := buildGitHubPRAttachment(prFlag)
+			if prErr != nil {
+				output.Error(prErr.Error(), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["url"] = prURL
+			if titleFlag != "" {
+				input["title"] = titleFlag
+			} else {
+				input["title"] = prTitle
+			}
+			if subtitleFlag != "" {
+				input["subtitle"] = subtitleFlag
+			} else if prSubtitle != "" {
+				input["subtitle"] = prSubtitle
+			}
+			// GitHub icon
+			if iconURLFlag == "" {
+				input["iconUrl"] = "https://github.com/favicon.ico"
+			}
+		}
+
+		// Handle generic URL attachment
+		if urlFlag != "" {
+			input["url"] = urlFlag
+			if titleFlag == "" {
+				output.Error("--title is required when using --url", plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["title"] = titleFlag
+			if subtitleFlag != "" {
+				input["subtitle"] = subtitleFlag
+			}
+		}
+
+		if iconURLFlag != "" {
+			input["iconUrl"] = iconURLFlag
+		}
+
+		// Create the attachment
+		attachment, err := client.CreateAttachment(context.Background(), input)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to create attachment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(attachment)
+		} else if plaintext {
+			fmt.Printf("Attached %s to %s\n", attachment.Title, issue.Identifier)
+			fmt.Printf("URL: %s\n", attachment.URL)
+		} else {
+			fmt.Printf("%s Attached to %s: %s\n",
+				color.New(color.FgGreen).Sprint("✓"),
+				color.New(color.FgCyan, color.Bold).Sprint(issue.Identifier),
+				attachment.Title)
+			fmt.Printf("  %s\n", color.New(color.FgBlue, color.Underline).Sprint(attachment.URL))
+		}
+	},
+}
+
+// buildGitHubPRAttachment constructs PR URL, title, and subtitle from various input formats.
+// Returns an error if numeric PR input is provided without being in a git repo with a GitHub remote.
+func buildGitHubPRAttachment(prInput string) (url, title, subtitle string, err error) {
+	// Check if it's already a full URL
+	if strings.HasPrefix(prInput, "http://") || strings.HasPrefix(prInput, "https://") {
+		// Clean URL: remove trailing slashes and query parameters
+		cleanURL := prInput
+		if idx := strings.Index(cleanURL, "?"); idx != -1 {
+			cleanURL = cleanURL[:idx]
+		}
+		cleanURL = strings.TrimSuffix(cleanURL, "/")
+
+		// Parse GitHub PR URL (expected format: https://github.com/owner/repo/pull/123)
+		parts := strings.Split(cleanURL, "/")
+		if len(parts) >= 7 && parts[2] == "github.com" && parts[5] == "pull" {
+			owner := parts[3]
+			repo := parts[4]
+			prNumber := parts[6]
+			return cleanURL, fmt.Sprintf("PR #%s", prNumber), fmt.Sprintf("%s/%s", owner, repo), nil
+		}
+		return prInput, "GitHub PR", "", nil
+	}
+
+	// Just a PR number - try to detect repo from git remote
+	repoURL, detectErr := detectGitHubRepoFromGit()
+	if detectErr != nil {
+		return "", "", "", fmt.Errorf("cannot use PR number without full URL: %w. Please provide the full GitHub PR URL (e.g., https://github.com/owner/repo/pull/%s)", detectErr, prInput)
+	}
+
+	// Build full PR URL from detected repo
+	prURL := fmt.Sprintf("%s/pull/%s", repoURL, prInput)
+	// Extract owner/repo for subtitle
+	parts := strings.Split(repoURL, "/")
+	var repoSubtitle string
+	if len(parts) >= 2 {
+		repoSubtitle = fmt.Sprintf("%s/%s", parts[len(parts)-2], parts[len(parts)-1])
+	}
+
+	return prURL, fmt.Sprintf("PR #%s", prInput), repoSubtitle, nil
+}
+
+// detectGitHubRepoFromGit attempts to detect a GitHub repository URL from the current git directory.
+func detectGitHubRepoFromGit() (string, error) {
+	// Try to get the remote URL using git
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository or no 'origin' remote configured")
+	}
+
+	remoteURL := strings.TrimSpace(string(output))
+
+	// Parse various git URL formats
+	// SSH: git@github.com:owner/repo.git
+	// HTTPS: https://github.com/owner/repo.git
+	// HTTPS: https://github.com/owner/repo
+
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		// SSH format: git@github.com:owner/repo.git
+		path := strings.TrimPrefix(remoteURL, "git@github.com:")
+		path = strings.TrimSuffix(path, ".git")
+		return "https://github.com/" + path, nil
+	}
+
+	if strings.Contains(remoteURL, "github.com") {
+		// HTTPS format
+		url := strings.TrimSuffix(remoteURL, ".git")
+		// Ensure it starts with https://
+		if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+			url = "https://" + url
+		}
+		return url, nil
+	}
+
+	return "", fmt.Errorf("remote 'origin' is not a GitHub repository")
+}
+
 func init() {
 	rootCmd.AddCommand(issueCmd)
 	issueCmd.AddCommand(issueListCmd)
@@ -1198,12 +1481,14 @@ func init() {
 	issueCmd.AddCommand(issueAssignCmd)
 	issueCmd.AddCommand(issueCreateCmd)
 	issueCmd.AddCommand(issueUpdateCmd)
+	issueCmd.AddCommand(issueAttachCmd)
 
 	// Issue list flags
 	issueListCmd.Flags().StringP("assignee", "a", "", "Filter by assignee (email or 'me')")
 	issueListCmd.Flags().StringP("state", "s", "", "Filter by state name")
 	issueListCmd.Flags().StringP("team", "t", "", "Filter by team key")
 	issueListCmd.Flags().IntP("priority", "r", -1, "Filter by priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
+	issueListCmd.Flags().StringP("cycle", "y", "", "Filter by cycle ('current' or cycle number)")
 	issueListCmd.Flags().IntP("limit", "l", 50, "Maximum number of issues to fetch")
 	issueListCmd.Flags().BoolP("include-completed", "c", false, "Include completed and canceled issues")
 	issueListCmd.Flags().StringP("sort", "o", "linear", "Sort order: linear (default), created, updated")
@@ -1214,6 +1499,7 @@ func init() {
 	issueSearchCmd.Flags().StringP("state", "s", "", "Filter by state name")
 	issueSearchCmd.Flags().StringP("team", "t", "", "Filter by team key")
 	issueSearchCmd.Flags().IntP("priority", "r", -1, "Filter by priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
+	issueSearchCmd.Flags().StringP("cycle", "y", "", "Filter by cycle ('current' or cycle number)")
 	issueSearchCmd.Flags().IntP("limit", "l", 50, "Maximum number of issues to fetch")
 	issueSearchCmd.Flags().BoolP("include-completed", "c", false, "Include completed and canceled issues")
 	issueSearchCmd.Flags().Bool("include-archived", false, "Include archived issues in results")
@@ -1226,6 +1512,8 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("project", "", "Project ID to attach issue to")
+	issueCreateCmd.Flags().StringSlice("labels", []string{}, "Label IDs to attach (comma-separated)")
 	issueCreateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, or displayName)")
 	issueCreateCmd.Flags().StringSlice("label", []string{}, "Label name(s) to apply (can be repeated)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
@@ -1238,6 +1526,14 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().StringSlice("labels", []string{}, "Label IDs to set (comma-separated, replaces existing labels)")
 	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none', 'null', or empty to remove parent)")
 	issueUpdateCmd.Flags().String("delegate", "", "Delegate to agent (email, name, displayName, or 'none' to remove)")
+
+	// Issue attach flags
+	issueAttachCmd.Flags().String("pr", "", "GitHub PR number or full URL")
+	issueAttachCmd.Flags().String("url", "", "URL to attach")
+	issueAttachCmd.Flags().String("title", "", "Attachment title")
+	issueAttachCmd.Flags().String("subtitle", "", "Attachment subtitle")
+	issueAttachCmd.Flags().String("icon-url", "", "Icon URL for the attachment")
 }
