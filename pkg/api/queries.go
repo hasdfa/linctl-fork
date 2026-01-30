@@ -428,6 +428,10 @@ func (c *Client) GetIssues(ctx context.Context, filter map[string]interface{}, f
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -499,6 +503,10 @@ func (c *Client) IssueSearch(ctx context.Context, term string, filter map[string
 					team {
 						id
 						key
+						name
+					}
+					project {
+						id
 						name
 					}
 					labels {
@@ -1112,6 +1120,10 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -1172,6 +1184,10 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 					team {
 						id
 						key
+						name
+					}
+					project {
+						id
 						name
 					}
 					labels {
