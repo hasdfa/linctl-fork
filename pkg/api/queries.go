@@ -104,28 +104,28 @@ type State struct {
 
 // Project represents a Linear project
 type Project struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	State       string     `json:"state"`
-	Progress    float64    `json:"progress"`
-	Priority    int        `json:"priority"`
-	StartDate   *string    `json:"startDate"`
-	TargetDate  *string    `json:"targetDate"`
-	Lead        *User      `json:"lead"`
-	Teams       *Teams     `json:"teams"`
-	URL         string     `json:"url"`
-	Icon        *string    `json:"icon"`
-	Color       string     `json:"color"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
-	CompletedAt *time.Time `json:"completedAt"`
-	CanceledAt  *time.Time `json:"canceledAt"`
-	ArchivedAt  *time.Time `json:"archivedAt"`
-	Creator     *User      `json:"creator"`
-	Members     *Users     `json:"members"`
-	Issues      *Issues    `json:"issues"`
-	Labels      *Labels    `json:"labels"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	State       string       `json:"state"`
+	Progress    float64      `json:"progress"`
+	Priority    int          `json:"priority"`
+	StartDate   *string      `json:"startDate"`
+	TargetDate  *string      `json:"targetDate"`
+	Lead        *User        `json:"lead"`
+	Teams       *Teams       `json:"teams"`
+	URL         string       `json:"url"`
+	Icon        *string      `json:"icon"`
+	Color       string       `json:"color"`
+	CreatedAt   time.Time    `json:"createdAt"`
+	UpdatedAt   time.Time    `json:"updatedAt"`
+	CompletedAt *time.Time   `json:"completedAt"`
+	CanceledAt  *time.Time   `json:"canceledAt"`
+	ArchivedAt  *time.Time   `json:"archivedAt"`
+	Creator     *User        `json:"creator"`
+	Members     *Users       `json:"members"`
+	Issues      *Issues      `json:"issues"`
+	Labels      *Labels      `json:"labels"`
 	Initiatives *Initiatives `json:"initiatives"`
 	// Additional fields
 	SlugId              string          `json:"slugId"`
