@@ -109,6 +109,7 @@ type Project struct {
 	Description string     `json:"description"`
 	State       string     `json:"state"`
 	Progress    float64    `json:"progress"`
+	Priority    int        `json:"priority"`
 	StartDate   *string    `json:"startDate"`
 	TargetDate  *string    `json:"targetDate"`
 	Lead        *User      `json:"lead"`
@@ -124,6 +125,8 @@ type Project struct {
 	Creator     *User      `json:"creator"`
 	Members     *Users     `json:"members"`
 	Issues      *Issues    `json:"issues"`
+	Labels      *Labels    `json:"labels"`
+	Initiatives *Initiatives `json:"initiatives"`
 	// Additional fields
 	SlugId              string          `json:"slugId"`
 	Content             string          `json:"content"`
@@ -239,6 +242,12 @@ type Initiative struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// Initiatives represents a paginated list of initiatives
+type Initiatives struct {
+	Nodes    []Initiative `json:"nodes"`
+	PageInfo PageInfo     `json:"pageInfo"`
 }
 
 type PageInfo struct {
@@ -2034,4 +2043,137 @@ func (c *Client) UnresolveComment(ctx context.Context, commentID string) (*Comme
 	}
 
 	return &response.CommentUpdate.Comment, nil
+}
+
+// CreateProject creates a new project
+func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}) (*Project, error) {
+	query := `
+		mutation CreateProject($input: ProjectCreateInput!) {
+			projectCreate(input: $input) {
+				project {
+					id
+					name
+					description
+					state
+					progress
+					priority
+					startDate
+					targetDate
+					url
+					createdAt
+					updatedAt
+					lead {
+						id
+						name
+						email
+					}
+					teams {
+						nodes {
+							id
+							key
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		ProjectCreate struct {
+			Project Project `json:"project"`
+		} `json:"projectCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ProjectCreate.Project, nil
+}
+
+// UpdateProject updates an existing project
+func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]interface{}) (*Project, error) {
+	query := `
+		mutation UpdateProject($id: String!, $input: ProjectUpdateInput!) {
+			projectUpdate(id: $id, input: $input) {
+				project {
+					id
+					name
+					description
+					state
+					progress
+					priority
+					startDate
+					targetDate
+					url
+					createdAt
+					updatedAt
+					lead {
+						id
+						name
+						email
+					}
+					teams {
+						nodes {
+							id
+							key
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id":    id,
+		"input": input,
+	}
+
+	var response struct {
+		ProjectUpdate struct {
+			Project Project `json:"project"`
+		} `json:"projectUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ProjectUpdate.Project, nil
+}
+
+// ArchiveProject archives a project by ID
+func (c *Client) ArchiveProject(ctx context.Context, id string) (bool, error) {
+	query := `
+		mutation ArchiveProject($id: String!) {
+			projectArchive(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		ProjectArchive struct {
+			Success bool `json:"success"`
+		} `json:"projectArchive"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return false, err
+	}
+
+	return response.ProjectArchive.Success, nil
 }
