@@ -515,6 +515,11 @@ func (c *Client) GetIssues(ctx context.Context, filter map[string]interface{}, f
 						name
 						state
 					}
+					cycle {
+						id
+						number
+						name
+					}
 				}
 				pageInfo {
 					hasNextPage
@@ -592,6 +597,11 @@ func (c *Client) IssueSearch(ctx context.Context, term string, filter map[string
 						id
 						name
 						state
+					}
+					cycle {
+						id
+						number
+						name
 					}
 				}
 				pageInfo {
@@ -1347,6 +1357,10 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -1812,6 +1826,54 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string,
 	}
 
 	return &response.CommentCreate.Comment, nil
+}
+
+// CreateAttachment creates a new attachment for an issue
+func (c *Client) CreateAttachment(ctx context.Context, input map[string]interface{}) (*Attachment, error) {
+	query := `
+		mutation CreateAttachment($input: AttachmentCreateInput!) {
+			attachmentCreate(input: $input) {
+				success
+				attachment {
+					id
+					title
+					subtitle
+					url
+					metadata
+					createdAt
+					creator {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		AttachmentCreate struct {
+			Success    bool       `json:"success"`
+			Attachment Attachment `json:"attachment"`
+		} `json:"attachmentCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	if !response.AttachmentCreate.Success {
+		// Include input details in error message for debugging
+		inputJSON, _ := json.Marshal(input)
+		return nil, fmt.Errorf("failed to create attachment (success=false), input: %s", string(inputJSON))
+	}
+
+	return &response.AttachmentCreate.Attachment, nil
 }
 
 // DeleteComment deletes a comment by ID

@@ -3,7 +3,7 @@ package cmd
 import (
 	"strings"
 
-	"github.com/dorkitude/linctl/pkg/api"
+	"github.com/charlietran/linctl/pkg/api"
 )
 
 func commentAuthorName(comment *api.Comment) string {
