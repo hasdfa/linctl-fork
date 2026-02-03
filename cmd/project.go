@@ -896,10 +896,7 @@ Examples:
 
   # Update multiple fields
   linctl project update abc-123 --state started --priority 2
-  linctl project update abc-123 --description "Full description" --summary "Short summary"
-
-  # Update with labels
-  linctl project update abc-123 --label "urgent,backend"`,
+  linctl project update abc-123 --description "Full description" --summary "Short summary"`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
@@ -971,7 +968,7 @@ Examples:
 		// Validate priority if provided
 		if priority, ok := input["priority"].(int); ok {
 			if priority < 0 || priority > 4 {
-				output.Error("Priority must be between 0 and 4", plaintext, jsonOut)
+				output.Error("Priority must be between 0 (None) and 4 (Low)", plaintext, jsonOut)
 				os.Exit(1)
 			}
 		}

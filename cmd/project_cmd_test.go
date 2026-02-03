@@ -104,3 +104,52 @@ func TestProjectArchive_Plaintext_IncludesName(t *testing.T) {
 		}
 	})
 }
+
+func TestProjectUpdateCommandExists(t *testing.T) {
+	if projectUpdateCmd == nil {
+		t.Fatal("projectUpdateCmd should not be nil")
+	}
+	if projectUpdateCmd.Use != "update PROJECT-UUID" {
+		t.Errorf("Expected Use 'update PROJECT-UUID', got '%s'", projectUpdateCmd.Use)
+	}
+	if projectUpdateCmd.Short == "" {
+		t.Error("projectUpdateCmd.Short should not be empty")
+	}
+}
+
+func TestProjectUpdateRequiresOneArg(t *testing.T) {
+	err := projectUpdateCmd.Args(projectUpdateCmd, []string{})
+	if err == nil {
+		t.Error("Expected error when no args provided")
+	}
+	err = projectUpdateCmd.Args(projectUpdateCmd, []string{"p1"})
+	if err != nil {
+		t.Errorf("Expected no error with one arg, got: %v", err)
+	}
+}
+
+func TestProjectUpdate_Plaintext_Output(t *testing.T) {
+	mc := &mockProjectClient{}
+	withInjectedProjectClient(t, mc, func() {
+		viper.Set("plaintext", true)
+		viper.Set("json", false)
+		// Reset flags to defaults first
+		_ = projectUpdateCmd.Flags().Set("name", "UpdatedName")
+		_ = projectUpdateCmd.Flags().Set("state", "started")
+		_ = projectUpdateCmd.Flags().Set("priority", "2")
+		out := captureStdout(t, func() { projectUpdateCmd.Run(projectUpdateCmd, []string{"p1"}) })
+		if !contains(out, "# Project Updated") {
+			t.Fatalf("Expected '# Project Updated' in output, got:\n%s", out)
+		}
+	})
+}
+
+func TestProjectUpdateFlags(t *testing.T) {
+	// Verify all expected flags are defined
+	flags := []string{"name", "description", "summary", "state", "priority"}
+	for _, flag := range flags {
+		if projectUpdateCmd.Flags().Lookup(flag) == nil {
+			t.Errorf("Expected flag '--%s' to be defined", flag)
+		}
+	}
+}
