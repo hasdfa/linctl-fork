@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -17,6 +19,13 @@ type User struct {
 	Active      bool       `json:"active"`
 	Admin       bool       `json:"admin"`
 	CreatedAt   *time.Time `json:"createdAt"`
+}
+
+// Organization represents a Linear organization/workspace
+type Organization struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	URLKey string `json:"urlKey"`
 }
 
 // Team represents a Linear team
@@ -79,6 +88,8 @@ type Issue struct {
 	SlackIssueComments    []SlackComment   `json:"slackIssueComments"`
 	ExternalUserCreator   *ExternalUser    `json:"externalUserCreator"`
 	CustomerTickets       []CustomerTicket `json:"customerTickets"`
+	AgentSession          *AgentSession    `json:"agentSession"`
+	Delegate              *User            `json:"delegate"`
 }
 
 // State represents an issue state
@@ -98,6 +109,7 @@ type Project struct {
 	Description string     `json:"description"`
 	State       string     `json:"state"`
 	Progress    float64    `json:"progress"`
+	Priority    int        `json:"priority"`
 	StartDate   *string    `json:"startDate"`
 	TargetDate  *string    `json:"targetDate"`
 	Lead        *User      `json:"lead"`
@@ -113,6 +125,8 @@ type Project struct {
 	Creator     *User      `json:"creator"`
 	Members     *Users     `json:"members"`
 	Issues      *Issues    `json:"issues"`
+	Labels      *Labels    `json:"labels"`
+	Initiatives *Initiatives `json:"initiatives"`
 	// Additional fields
 	SlugId              string          `json:"slugId"`
 	Content             string          `json:"content"`
@@ -228,6 +242,12 @@ type Initiative struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// Initiatives represents a paginated list of initiatives
+type Initiatives struct {
+	Nodes    []Initiative `json:"nodes"`
+	PageInfo PageInfo     `json:"pageInfo"`
 }
 
 type PageInfo struct {
@@ -368,6 +388,30 @@ type ProjectLink struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// AgentSession represents an agent session on an issue
+type AgentSession struct {
+	ID         string           `json:"id"`
+	Status     string           `json:"status"` // pending, active, complete, awaitingInput, error, stale
+	CreatedAt  time.Time        `json:"createdAt"`
+	UpdatedAt  time.Time        `json:"updatedAt"`
+	AppUser    *User            `json:"appUser"`
+	Activities *AgentActivities `json:"activities"`
+}
+
+// AgentActivities is a paginated list of agent activities
+type AgentActivities struct {
+	Nodes    []AgentActivity `json:"nodes"`
+	PageInfo PageInfo        `json:"pageInfo"`
+}
+
+// AgentActivity represents a single activity in an agent session
+type AgentActivity struct {
+	ID        string                 `json:"id"`
+	CreatedAt time.Time              `json:"createdAt"`
+	Ephemeral bool                   `json:"ephemeral"`
+	Content   map[string]interface{} `json:"content"`
+}
+
 // GetViewer returns the current authenticated user
 func (c *Client) GetViewer(ctx context.Context) (*User, error) {
 	query := `
@@ -394,6 +438,46 @@ func (c *Client) GetViewer(ctx context.Context) (*User, error) {
 	}
 
 	return &response.Viewer, nil
+}
+
+// GetViewerCached returns the current authenticated user, using a cached value if available.
+// This avoids repeated API calls when the viewer information is needed multiple times.
+func (c *Client) GetViewerCached(ctx context.Context) (*User, error) {
+	if c.cachedViewer != nil {
+		return c.cachedViewer, nil
+	}
+
+	viewer, err := c.GetViewer(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	c.cachedViewer = viewer
+	return viewer, nil
+}
+
+// GetOrganization returns the current organization/workspace
+func (c *Client) GetOrganization(ctx context.Context) (*Organization, error) {
+	query := `
+		query Organization {
+			organization {
+				id
+				name
+				urlKey
+			}
+		}
+	`
+
+	var response struct {
+		Organization Organization `json:"organization"`
+	}
+
+	err := c.Execute(ctx, query, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Organization, nil
 }
 
 // GetIssues returns a list of issues with optional filtering
@@ -438,6 +522,16 @@ func (c *Client) GetIssues(ctx context.Context, filter map[string]interface{}, f
 							name
 							color
 						}
+					}
+					project {
+						id
+						name
+						state
+					}
+					cycle {
+						id
+						number
+						name
 					}
 				}
 				pageInfo {
@@ -515,6 +609,16 @@ func (c *Client) IssueSearch(ctx context.Context, term string, filter map[string
 							name
 							color
 						}
+					}
+					project {
+						id
+						name
+						state
+					}
+					cycle {
+						id
+						number
+						name
 					}
 				}
 				pageInfo {
@@ -813,6 +917,89 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 
 	variables := map[string]interface{}{
 		"id": id,
+	}
+
+	var response struct {
+		Issue Issue `json:"issue"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Issue, nil
+}
+
+// GetIssueAgentSession returns the issue with delegate and comments containing agent sessions
+func (c *Client) GetIssueAgentSession(ctx context.Context, issueId string) (*Issue, error) {
+	query := `
+		query IssueAgentSession($id: String!) {
+			issue(id: $id) {
+				id
+				identifier
+				title
+				state {
+					name
+					type
+				}
+				assignee {
+					name
+					email
+				}
+				delegate {
+					id
+					name
+					displayName
+					email
+				}
+				comments(first: 50) {
+					nodes {
+						id
+						body
+						createdAt
+						user {
+							name
+							displayName
+						}
+						agentSession {
+							id
+							status
+							createdAt
+							updatedAt
+							appUser {
+								id
+								name
+								displayName
+							}
+							activities(first: 50) {
+								nodes {
+									id
+									createdAt
+									ephemeral
+									content {
+										... on AgentActivityThoughtContent { __typename body }
+										... on AgentActivityResponseContent { __typename body }
+										... on AgentActivityActionContent { __typename action parameter }
+										... on AgentActivityErrorContent { __typename body }
+										... on AgentActivityElicitationContent { __typename body }
+										... on AgentActivityPromptContent { __typename body }
+									}
+								}
+								pageInfo {
+									hasNextPage
+									endCursor
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": issueId,
 	}
 
 	var response struct {
@@ -1131,6 +1318,11 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 							color
 						}
 					}
+					parent {
+						id
+						identifier
+						title
+					}
 				}
 			}
 		}
@@ -1253,14 +1445,18 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
 
 // Comment represents a Linear comment
 type Comment struct {
-	ID        string     `json:"id"`
-	Body      string     `json:"body"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	EditedAt  *time.Time `json:"editedAt"`
-	User      *User      `json:"user"`
-	Parent    *Comment   `json:"parent"`
-	Children  *Comments  `json:"children"`
+	ID               string        `json:"id"`
+	Body             string        `json:"body"`
+	CreatedAt        time.Time     `json:"createdAt"`
+	UpdatedAt        time.Time     `json:"updatedAt"`
+	EditedAt         *time.Time    `json:"editedAt"`
+	ResolvedAt       *time.Time    `json:"resolvedAt"`
+	User             *User         `json:"user"`
+	ResolvingUser    *User         `json:"resolvingUser"`
+	ResolvingComment *Comment      `json:"resolvingComment"`
+	Parent           *Comment      `json:"parent"`
+	Children         *Comments     `json:"children"`
+	AgentSession     *AgentSession `json:"agentSession"`
 }
 
 // Comments represents a paginated list of comments
@@ -1316,6 +1512,47 @@ func (c *Client) GetTeamStates(ctx context.Context, teamKey string) ([]WorkflowS
 	}
 
 	return response.Team.States.Nodes, nil
+}
+
+// GetTeamLabels returns labels for a specific team
+func (c *Client) GetTeamLabels(ctx context.Context, teamKey string) ([]Label, error) {
+	query := `
+		query TeamLabels($key: String!) {
+			team(id: $key) {
+				labels {
+					nodes {
+						id
+						name
+						color
+						description
+						parent {
+							id
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"key": teamKey,
+	}
+
+	var response struct {
+		Team struct {
+			Labels struct {
+				Nodes []Label `json:"nodes"`
+			} `json:"labels"`
+		} `json:"team"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.Team.Labels.Nodes, nil
 }
 
 // GetTeamMembers returns members of a specific team
@@ -1436,6 +1673,31 @@ func (c *Client) GetUser(ctx context.Context, email string) (*User, error) {
 	return &response.User, nil
 }
 
+// FindUserByIdentifier finds a user by email, name, or displayName.
+// Uses pagination to search through all users in the workspace.
+func (c *Client) FindUserByIdentifier(ctx context.Context, identifier string) (*User, error) {
+	var cursor string
+	for {
+		users, err := c.GetUsers(ctx, 100, cursor, "")
+		if err != nil {
+			return nil, err
+		}
+
+		for _, user := range users.Nodes {
+			if user.Email == identifier || user.Name == identifier || user.DisplayName == identifier {
+				return &user, nil
+			}
+		}
+
+		if !users.PageInfo.HasNextPage {
+			break
+		}
+		cursor = users.PageInfo.EndCursor
+	}
+
+	return nil, fmt.Errorf("user not found: %s", identifier)
+}
+
 // GetIssueComments returns comments for a specific issue
 func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int, after string, orderBy string) (*Comments, error) {
 	query := `
@@ -1447,10 +1709,54 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 						body
 						createdAt
 						updatedAt
+						editedAt
 						user {
 							id
 							name
 							email
+							avatarUrl
+						}
+						parent {
+							id
+							body
+							createdAt
+							updatedAt
+							editedAt
+							user {
+								id
+								name
+								email
+							}
+							parent {
+								id
+							}
+							children {
+								nodes {
+									id
+								}
+								pageInfo {
+									hasNextPage
+									endCursor
+								}
+							}
+						}
+						children {
+							nodes {
+								id
+								body
+								createdAt
+								updatedAt
+								editedAt
+								user {
+									id
+									name
+									email
+								}
+							}
+							pageInfo {
+								hasNextPage
+								endCursor
+							}
 						}
 					}
 					pageInfo {
@@ -1487,8 +1793,13 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 	return &response.Issue.Comments, nil
 }
 
-// CreateComment creates a new comment on an issue
-func (c *Client) CreateComment(ctx context.Context, issueID string, body string) (*Comment, error) {
+// CreateComment creates a new comment on an issue.
+// The optional parentID parameter can be used to create a threaded reply under an existing comment.
+// Usage:
+//
+//	CreateComment(ctx, issueID, body)           // top-level comment
+//	CreateComment(ctx, issueID, body, parentID) // threaded reply
+func (c *Client) CreateComment(ctx context.Context, issueID string, body string, parentID ...string) (*Comment, error) {
 	query := `
 		mutation CreateComment($input: CommentCreateInput!) {
 			commentCreate(input: $input) {
@@ -1502,6 +1813,9 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 						name
 						email
 					}
+					parent {
+						id
+					}
 				}
 			}
 		}
@@ -1510,6 +1824,11 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	input := map[string]interface{}{
 		"issueId": issueID,
 		"body":    body,
+	}
+
+	// Add parentId if provided for threaded replies
+	if len(parentID) > 0 && parentID[0] != "" {
+		input["parentId"] = parentID[0]
 	}
 
 	variables := map[string]interface{}{
@@ -1528,4 +1847,345 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	}
 
 	return &response.CommentCreate.Comment, nil
+}
+
+// CreateAttachment creates a new attachment for an issue
+func (c *Client) CreateAttachment(ctx context.Context, input map[string]interface{}) (*Attachment, error) {
+	query := `
+		mutation CreateAttachment($input: AttachmentCreateInput!) {
+			attachmentCreate(input: $input) {
+				success
+				attachment {
+					id
+					title
+					subtitle
+					url
+					metadata
+					createdAt
+					creator {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		AttachmentCreate struct {
+			Success    bool       `json:"success"`
+			Attachment Attachment `json:"attachment"`
+		} `json:"attachmentCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	if !response.AttachmentCreate.Success {
+		// Include input details in error message for debugging
+		inputJSON, _ := json.Marshal(input)
+		return nil, fmt.Errorf("failed to create attachment (success=false), input: %s", string(inputJSON))
+	}
+
+	return &response.AttachmentCreate.Attachment, nil
+}
+
+// DeleteComment deletes a comment by ID
+func (c *Client) DeleteComment(ctx context.Context, commentID string) error {
+	query := `
+		mutation DeleteComment($id: String!) {
+			commentDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": commentID,
+	}
+
+	var response struct {
+		CommentDelete struct {
+			Success bool `json:"success"`
+		} `json:"commentDelete"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+
+	if !response.CommentDelete.Success {
+		return fmt.Errorf("comment %s could not be deleted", commentID)
+	}
+
+	return nil
+}
+
+// MentionAgent @mentions an agent in a comment to trigger them.
+// TODO: The mention format using profile URLs may not be the correct way to trigger
+// Linear agents. Linear typically uses @username mentions in markdown. This should
+// be verified against Linear's actual mention API specification and updated accordingly.
+func (c *Client) MentionAgent(ctx context.Context, issueID string, agentDisplayName string, message string) (string, error) {
+	// Get workspace slug from organization
+	org, err := c.GetOrganization(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get organization: %w", err)
+	}
+
+	// Create a comment that @mentions the agent using Linear URL format
+	// Format: https://linear.app/workspace/profiles/displayname
+	// URL-encode the display name to handle spaces and special characters
+	encodedDisplayName := url.PathEscape(agentDisplayName)
+	mentionURL := fmt.Sprintf("https://linear.app/%s/profiles/%s", org.URLKey, encodedDisplayName)
+	mentionMessage := fmt.Sprintf("%s\n\n%s", mentionURL, message)
+
+	comment, err := c.CreateComment(ctx, issueID, mentionMessage)
+	if err != nil {
+		return "", fmt.Errorf("failed to create comment: %w", err)
+	}
+
+	return comment.ID, nil
+}
+
+// ResolveComment marks a comment thread as resolved by the current user.
+// It uses the commentUpdate mutation with resolvingUserId set to the current user.
+// The current user is cached to avoid repeated API calls when resolving multiple comments.
+func (c *Client) ResolveComment(ctx context.Context, commentID string) (*Comment, error) {
+	// Get the current user (cached to avoid repeated API calls)
+	viewer, err := c.GetViewerCached(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	query := `
+		mutation ResolveComment($id: String!, $input: CommentUpdateInput!) {
+			commentUpdate(id: $id, input: $input) {
+				comment {
+					id
+					body
+					createdAt
+					updatedAt
+					resolvedAt
+					user {
+						id
+						name
+						email
+					}
+					resolvingUser {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": commentID,
+		"input": map[string]interface{}{
+			"resolvingUserId": viewer.ID,
+		},
+	}
+
+	var response struct {
+		CommentUpdate struct {
+			Comment Comment `json:"comment"`
+		} `json:"commentUpdate"`
+	}
+
+	err = c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.CommentUpdate.Comment, nil
+}
+
+// UnresolveComment removes the resolved status from a comment thread.
+func (c *Client) UnresolveComment(ctx context.Context, commentID string) (*Comment, error) {
+	query := `
+		mutation UnresolveComment($id: String!, $input: CommentUpdateInput!) {
+			commentUpdate(id: $id, input: $input) {
+				comment {
+					id
+					body
+					createdAt
+					updatedAt
+					resolvedAt
+					user {
+						id
+						name
+						email
+					}
+					resolvingUser {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": commentID,
+		"input": map[string]interface{}{
+			"resolvingUserId": nil,
+		},
+	}
+
+	var response struct {
+		CommentUpdate struct {
+			Comment Comment `json:"comment"`
+		} `json:"commentUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.CommentUpdate.Comment, nil
+}
+
+// CreateProject creates a new project
+func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}) (*Project, error) {
+	query := `
+		mutation CreateProject($input: ProjectCreateInput!) {
+			projectCreate(input: $input) {
+				project {
+					id
+					name
+					description
+					state
+					progress
+					priority
+					startDate
+					targetDate
+					url
+					createdAt
+					updatedAt
+					lead {
+						id
+						name
+						email
+					}
+					teams {
+						nodes {
+							id
+							key
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		ProjectCreate struct {
+			Project Project `json:"project"`
+		} `json:"projectCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ProjectCreate.Project, nil
+}
+
+// UpdateProject updates an existing project
+func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]interface{}) (*Project, error) {
+	query := `
+		mutation UpdateProject($id: String!, $input: ProjectUpdateInput!) {
+			projectUpdate(id: $id, input: $input) {
+				project {
+					id
+					name
+					description
+					state
+					progress
+					priority
+					startDate
+					targetDate
+					url
+					createdAt
+					updatedAt
+					lead {
+						id
+						name
+						email
+					}
+					teams {
+						nodes {
+							id
+							key
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id":    id,
+		"input": input,
+	}
+
+	var response struct {
+		ProjectUpdate struct {
+			Project Project `json:"project"`
+		} `json:"projectUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ProjectUpdate.Project, nil
+}
+
+// ArchiveProject archives a project by ID
+func (c *Client) ArchiveProject(ctx context.Context, id string) (bool, error) {
+	query := `
+		mutation ArchiveProject($id: String!) {
+			projectArchive(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		ProjectArchive struct {
+			Success bool `json:"success"`
+		} `json:"projectArchive"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return false, err
+	}
+
+	return response.ProjectArchive.Success, nil
 }
