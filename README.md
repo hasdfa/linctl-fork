@@ -1,7 +1,22 @@
 # 🚀 linctl - Linear CLI Tool
 
-
 A comprehensive command-line interface for Linear's API, built with agents in mind (but nice for humans too).
+
+## Fork Notice
+
+This is a fork of [dorkitude/linctl](https://github.com/dorkitude/linctl) with additional enhancements.
+
+### Enhancements in this Fork
+
+#### Cycle Display & Filtering
+
+- **Fixed**: Cycle field now displays correctly when listing issues (was showing NULL)
+- **Added**: Cycle column in issue list table and plaintext output
+- **Added**: `--cycle` flag for filtering issues:
+  - Use `--cycle current` to filter issues in the current active cycle
+  - Use `--cycle <number>` to filter by a specific cycle number
+  - Example: `linctl issue list --cycle current`
+  - Example: `linctl issue list --cycle 42`
 
 ## ✨ Features
 
@@ -11,6 +26,7 @@ A comprehensive command-line interface for Linear's API, built with agents in mi
   - Git branch integration showing linked branches
   - Cycle (sprint) and project associations
   - Attachments and recent comments preview
+  - Link GitHub PRs and external resources via `linctl issue attach`
   - Due dates, snoozed status, and completion tracking
   - Full-text search via `linctl issue search`
 - 👥 **Team Management**: View teams, get team details, and list team members
@@ -22,7 +38,7 @@ A comprehensive command-line interface for Linear's API, built with agents in mi
   - Timeline tracking (created, updated, completed dates)
 - 👤 **User Management**: List all users, view user details, and current user info
 - 💬 **Comments**: List and create comments on issues with time-aware formatting
-- 📎 **Attachments**: View file uploads and attachments on issues
+- 📎 **Attachments**: View and create attachments on issues, including GitHub PRs and external URLs
 - 🔗 **Webhooks**: Configure and manage webhooks
 - 🎨 **Multiple Output Formats**: Table, plaintext, and JSON output
 - ⚡ **Performance**: Fast and lightweight CLI tool
@@ -33,16 +49,18 @@ A comprehensive command-line interface for Linear's API, built with agents in mi
 
 ## 🛠️ Installation
 
-### Homebrew (macOS/Linux)
+### Using go install
+
 ```bash
-brew tap dorkitude/linctl
-brew install linctl
+brew tap hasdfa/linctl
+brew install hasdfa/linctl/linctl
 linctl docs      # Render the README.md
 ```
 
 ### From Source
+
 ```bash
-git clone https://github.com/dorkitude/linctl.git
+git clone https://github.com/hasdfa/linctl.git
 cd linctl
 make deps        # Install dependencies
 make build       # Build the binary
@@ -51,8 +69,9 @@ linctl docs      # Render the README.md
 ```
 
 ### For Development
+
 ```bash
-git clone https://github.com/dorkitude/linctl.git
+git clone https://github.com/hasdfa/linctl.git
 cd linctl
 make deps        # Install dependencies
 go run main.go   # Run directly without building
@@ -66,21 +85,23 @@ linctl docs      # Render the README.md
 ## Important: Default Filters
 
 **By default, `issue list`, `issue search`, and `project list` commands only show items created in the last 6 months!**
- 
+
 This improves performance and prevents overwhelming data loads. To see older items:
- - Use `--newer-than 1_year_ago` for items from the last year
- - Use `--newer-than all_time` to see ALL items ever created
- - See the [Time-based Filtering](#-time-based-filtering) section for details
+
+- Use `--newer-than 1_year_ago` for items from the last year
+- Use `--newer-than all_time` to see ALL items ever created
+- See the [Time-based Filtering](#-time-based-filtering) section for details
 
 **By default, `issue list` and `issue search` also filter out canceled and completed items. To see all items, use the `--include-completed` flag.**
-- Need archived matches? Add `--include-archived` when using `issue search`.
 
+- Need archived matches? Add `--include-archived` when using `issue search`.
 
 ## 🚀 Quick Start
 
-> **IMPORTANT**  Agents like Claude Code, Cursor, and Gemini should use the `--json` flag on all read operations.
+> **IMPORTANT** Agents like Claude Code, Cursor, and Gemini should use the `--json` flag on all read operations.
 
 ### 1. Authentication
+
 ```bash
 # Interactive authentication
 linctl auth
@@ -96,6 +117,7 @@ linctl docs | less
 ```
 
 ### 2. Issue Management
+
 ```bash
 # List all issues
 linctl issue list
@@ -141,12 +163,23 @@ linctl issue update LIN-123 --state "In Progress"
 linctl issue update LIN-123 --priority 1  # 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
 linctl issue update LIN-123 --due-date "2024-12-31"
 linctl issue update LIN-123 --due-date ""  # Remove due date
+linctl issue update LIN-123 --parent LIN-456  # Set parent issue
+linctl issue update LIN-123 --parent none  # Remove parent (also accepts 'null' or empty string)
 
 # Update multiple fields at once
 linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1
+linctl issue update LIN-123 --parent LIN-456 --title "Sub-task" --assignee me
+
+# Link a GitHub PR to an issue
+linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
+linctl issue attach LIN-123 --pr 456  # Detects repo from git remote origin
+
+# Attach any URL to an issue
+linctl issue attach LIN-123 --url https://example.com/design --title "Design Mockup"
 ```
 
 ### 3. Project Management
+
 ```bash
 # List all projects (shows IDs)
 linctl project list
@@ -165,6 +198,7 @@ linctl project get 65a77a62-ec5e-491e-b1d9-84aebee01b33
 ```
 
 ### 4. Team Management
+
 ```bash
 # List all teams
 linctl team list
@@ -177,6 +211,7 @@ linctl team members ENG
 ```
 
 ### 5. User Management
+
 ```bash
 # List all users
 linctl user list
@@ -192,6 +227,7 @@ linctl user me
 ```
 
 ### 6. Comments
+
 ```bash
 # List comments on an issue
 linctl comment list LIN-123
@@ -200,15 +236,36 @@ linctl comment list LIN-123
 linctl comment create LIN-123 --body "Fixed the authentication bug"
 ```
 
+### 7. Attachments
+```bash
+# Link a GitHub PR to an issue
+linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
+
+# Use PR number (detects repo from git remote origin)
+linctl issue attach LIN-123 --pr 456
+
+# Attach any external URL
+linctl issue attach LIN-123 --url https://figma.com/design/abc --title "UI Mockup"
+
+# Add more metadata
+linctl issue attach LIN-123 \
+  --url https://docs.google.com/document/d/abc \
+  --title "Technical Spec" \
+  --subtitle "Version 2.0" \
+  --icon-url https://ssl.gstatic.com/docs/doclist/images/mediatype/icon_1_document_x16.png
+```
+
 ## 📖 Command Reference
 
 ### Global Flags
+
 - `--plaintext, -p`: Plain text output (non-interactive)
 - `--json, -j`: JSON output for scripting
 - `--help, -h`: Show help
 - `--version, -v`: Show version
 
 ### Authentication Commands
+
 ```bash
 linctl auth               # Interactive authentication
 linctl auth login         # Same as above
@@ -218,6 +275,7 @@ linctl whoami            # Show current user
 ```
 
 ### Issue Commands
+
 ```bash
 # List issues with filters
 linctl issue list [flags]
@@ -260,12 +318,29 @@ linctl issue edit <issue-id> [flags]    # Alias
   -s, --state string       State name (e.g., 'Todo', 'In Progress', 'Done')
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
+  --parent string          Parent issue ID/identifier (or 'none' to remove parent)
 
 # Archive issue (coming soon)
 linctl issue archive <issue-id>
+
+# Attach resources to issues
+linctl issue attach <issue-id> [flags]
+# Flags:
+  --pr string          GitHub PR number or full URL
+  --url string         URL to attach
+  --title string       Attachment title (required with --url)
+  --subtitle string    Attachment subtitle (optional)
+  --icon-url string    Icon URL for the attachment (optional)
+
+# Examples:
+linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
+linctl issue attach LIN-123 --pr 456  # Detects repo from git remote origin
+linctl issue attach LIN-123 --url https://figma.com/file/abc --title "Design Mockup"
+linctl issue attach LIN-123 --url https://example.com --title "Spec" --subtitle "v2.0"
 ```
 
 ### Team Commands
+
 ```bash
 # List all teams with issue counts
 linctl team list
@@ -290,6 +365,7 @@ linctl team members ENG     # Lists all Engineering team members
 ```
 
 ### Project Commands
+
 ```bash
 # List projects
 linctl project list [flags]
@@ -311,6 +387,7 @@ linctl project create [flags]
 ```
 
 ### User Commands
+
 ```bash
 # List all users in workspace
 linctl user list [flags]
@@ -337,6 +414,7 @@ linctl user me              # Shows your profile with admin status
 ```
 
 ### Comment Commands
+
 ```bash
 # List all comments for an issue
 linctl comment list <issue-id> [flags]
@@ -363,9 +441,11 @@ linctl comment create LIN-456 --body "@john please review this PR"
 ## 🎨 Output Formats
 
 ### Table Format (Default)
+
 ```bash
 linctl issue list
 ```
+
 ```
 ID       Title                State        Assignee    Team  Priority
 LIN-123  Fix authentication   In Progress  john@co.com ENG   High
@@ -373,9 +453,11 @@ LIN-124  Update documentation Done         jane@co.com DOC   Normal
 ```
 
 ### Plaintext Format
+
 ```bash
 linctl issue list --plaintext
 ```
+
 ```
 # Issues
 ## BUG: Fix login button alignment
@@ -403,9 +485,11 @@ Steps to reproduce:
 ```
 
 ### JSON Format
+
 ```bash
 linctl issue list --json
 ```
+
 ```json
 [
   {
@@ -441,9 +525,32 @@ Authentication credentials are stored securely in `~/.linctl-auth.json`.
 ## 🔒 Authentication
 
 ### Personal API Key (Recommended)
+
 1. Go to [Linear Settings > API](https://linear.app/settings/api)
 2. Create a new Personal API Key
 3. Run `linctl auth` and paste your key
+
+### Temporary Override (Current Session)
+
+You can temporarily override your stored credentials using the `LINCTL_API_KEY` environment variable. This is useful for:
+- CI/CD pipelines
+- Testing with a different account
+- Running one-off commands without changing your stored credentials
+
+```bash
+# Override for a single command
+LINCTL_API_KEY="lin_api_..." linctl issue list
+
+# Override for the current shell session
+export LINCTL_API_KEY="lin_api_..."
+linctl issue list
+linctl whoami  # Shows the user for the env var token
+
+# Clear the override
+unset LINCTL_API_KEY
+```
+
+**Precedence:** Environment variable > Config file (`~/.linctl-auth.json`)
 
 ## 📅 Time-based Filtering
 
@@ -468,10 +575,12 @@ linctl issue list --newer-than all_time
 ### Supported Time Formats
 
 1. **Relative time expressions**: `N_units_ago`
+
    - Units: `minutes`, `hours`, `days`, `weeks`, `months`, `years`
    - Examples: `30_minutes_ago`, `2_hours_ago`, `3_days_ago`, `1_week_ago`, `6_months_ago`
 
 2. **Special values**:
+
    - `all_time` - Shows all items without any date filter
    - ISO dates - `2025-07-01` or `2025-07-01T15:30:00Z`
 
@@ -479,18 +588,18 @@ linctl issue list --newer-than all_time
 
 ### Quick Reference
 
-| Time Expression | Description | Example Command |
-|----------------|-------------|-----------------|
-| *(no flag)* | Last 6 months (default) | `linctl issue list` |
-| `1_day_ago` | Last 24 hours | `linctl issue list --newer-than 1_day_ago` |
-| `1_week_ago` | Last 7 days | `linctl issue list --newer-than 1_week_ago` |
-| `2_weeks_ago` | Last 14 days | `linctl issue list --newer-than 2_weeks_ago` |
-| `1_month_ago` | Last month | `linctl issue list --newer-than 1_month_ago` |
-| `3_months_ago` | Last quarter | `linctl issue list --newer-than 3_months_ago` |
-| `6_months_ago` | Last 6 months | `linctl issue list --newer-than 6_months_ago` |
-| `1_year_ago` | Last year | `linctl issue list --newer-than 1_year_ago` |
-| `all_time` | No date filter | `linctl issue list --newer-than all_time` |
-| `2025-07-01` | Since specific date | `linctl issue list --newer-than 2025-07-01` |
+| Time Expression | Description             | Example Command                               |
+| --------------- | ----------------------- | --------------------------------------------- |
+| _(no flag)_     | Last 6 months (default) | `linctl issue list`                           |
+| `1_day_ago`     | Last 24 hours           | `linctl issue list --newer-than 1_day_ago`    |
+| `1_week_ago`    | Last 7 days             | `linctl issue list --newer-than 1_week_ago`   |
+| `2_weeks_ago`   | Last 14 days            | `linctl issue list --newer-than 2_weeks_ago`  |
+| `1_month_ago`   | Last month              | `linctl issue list --newer-than 1_month_ago`  |
+| `3_months_ago`  | Last quarter            | `linctl issue list --newer-than 3_months_ago` |
+| `6_months_ago`  | Last 6 months           | `linctl issue list --newer-than 6_months_ago` |
+| `1_year_ago`    | Last year               | `linctl issue list --newer-than 1_year_ago`   |
+| `all_time`      | No date filter          | `linctl issue list --newer-than all_time`     |
+| `2025-07-01`    | Since specific date     | `linctl issue list --newer-than 2025-07-01`   |
 
 ### Common Use Cases
 
@@ -523,6 +632,7 @@ All list commands support sorting with the `--sort` or `-o` flag:
 - **updated**: Sort by last update date (most recently updated first)
 
 ### Examples
+
 ```bash
 # Get recently updated issues
 linctl issue list --sort updated
@@ -557,19 +667,23 @@ linctl project list --newer-than all_time --sort created
 linctl includes comprehensive unit and integration tests to ensure reliability.
 
 ### Running Tests
+
 ```bash
 # Run all tests  (currently just a smoke test)
 make test
 ```
 
 ### Integration Testing
+
 Integration tests require a Linear API key. Create a `.env.test` file:
+
 ```bash
 cp .env.test.example .env.test
 # Edit .env.test and add your LINEAR_TEST_API_KEY
 ```
 
 Or set it as an environment variable:
+
 ```bash
 export LINEAR_TEST_API_KEY="your-test-api-key"
 make test-integration
@@ -578,6 +692,7 @@ make test-integration
 ⚠️ **Note**: Integration tests are read-only and safe to run with production API keys.
 
 ### Test Structure
+
 - `tests/unit/` - Unit tests with mocked API responses
 - `tests/integration/` - End-to-end tests with real Linear API
 - `tests/testutils/` - Shared test utilities and helpers
@@ -619,11 +734,19 @@ linctl team members ENG --json | jq '. | length'
 
 # Export issue comments
 linctl comment list LIN-123 --json > issue-comments.json
+
+# Set up parent-child issue relationships
+linctl issue update LIN-124 --parent LIN-123  # Make LIN-124 a sub-issue of LIN-123
+linctl issue update LIN-125 --parent LIN-123  # Make LIN-125 also a sub-issue
+
+# Remove parent-child relationships
+linctl issue update LIN-124 --parent none
 ```
 
 ## 📡 Real-World Examples
 
 ### Team Workflows
+
 ```bash
 # Find which team a user belongs to
 for team in $(linctl team list --json | jq -r '.[].key'); do
@@ -639,6 +762,7 @@ linctl team list --json | jq '.[] | select(.issueCount > 50) | {key, name, issue
 ```
 
 ### User Management
+
 ```bash
 # Find inactive users
 linctl user list --json | jq '.[] | select(.active == false) | {name, email}'
@@ -651,6 +775,7 @@ linctl user list --json | jq '.[] | select(.admin == true and .isMe == false) | 
 ```
 
 ### Issue Comments
+
 ```bash
 # Add a comment mentioning the issue is blocked
 linctl comment create LIN-123 --body "Blocked by LIN-456. Waiting for API changes."
@@ -665,7 +790,28 @@ for issue in LIN-123 LIN-124 LIN-125; do
 done
 ```
 
+### Attachments & GitHub Integration
+```bash
+# Link a PR to the issue you're working on
+linctl issue attach LIN-123 --pr https://github.com/myorg/myrepo/pull/456
+
+# Bulk attach PRs from a GitHub search or gh CLI
+gh pr list --json number,url | jq -r '.[] | .url' | while read pr_url; do
+  linctl issue attach LIN-123 --pr "$pr_url"
+done
+
+# Attach design files
+linctl issue attach LIN-123 --url https://figma.com/file/abc --title "Design V2"
+
+# Attach documentation
+linctl issue attach LIN-456 \
+  --url https://docs.google.com/document/d/xyz \
+  --title "Architecture Spec" \
+  --subtitle "Updated 2024-01-15"
+```
+
 ### Project Tracking
+
 ```bash
 # List projects nearing completion (>80% progress)
 linctl project list --json | jq '.[] | select(.progress > 0.8) | {name, progress}'
@@ -678,6 +824,7 @@ linctl project get PROJECT-ID --json | jq '{name, startDate, targetDate, progres
 ```
 
 ### Daily Standup Helper
+
 ```bash
 #!/bin/bash
 # Show my recent activity
@@ -694,6 +841,7 @@ done
 ## 🐛 Troubleshooting
 
 ### Authentication Issues
+
 ```bash
 # Check authentication status
 linctl auth status
@@ -704,15 +852,19 @@ linctl auth
 ```
 
 ### API Rate Limits
+
 Linear has the following rate limits:
+
 - Personal API Keys: 5,000 requests/hour
 
 ### Common Errors
+
 - `Not authenticated`: Run `linctl auth` first
 - `Team not found`: Use team key (e.g., "ENG") not display name
 - `Invalid priority`: Use numbers 0-4 (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
 
 ### Time Filtering Issues
+
 - **Missing old issues?** Remember that list commands default to showing only the last 6 months
   - Solution: Use `--newer-than all_time` to see all issues
 - **Invalid time expression?** Check the format: `N_units_ago` (e.g., `3_weeks_ago`)
@@ -728,7 +880,7 @@ Linear has the following rate limits:
 4. Add tests
 5. Submit a pull request
 
-See CONTRIBUTING.md for a detailed release checklist and the Homebrew tap auto-bump workflow.
+See CONTRIBUTING.md for a detailed release checklist.
 
 ## 📄 License
 
@@ -737,8 +889,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🔗 Links
 
 - [Linear API Documentation](https://developers.linear.app/)
-- [GitHub Repository](https://github.com/dorkitude/linctl)
-- [Issue Tracker](https://github.com/dorkitude/linctl/issues)
+- [GitHub Repository](https://github.com/hasdfa/linctl)
+- [Issue Tracker](https://github.com/hasdfa/linctl/issues)
 
 ---
 
