@@ -1710,11 +1710,17 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 						createdAt
 						updatedAt
 						editedAt
+						resolvedAt
 						user {
 							id
 							name
 							email
 							avatarUrl
+						}
+						resolvingUser {
+							id
+							name
+							email
 						}
 						parent {
 							id

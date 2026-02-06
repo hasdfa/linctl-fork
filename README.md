@@ -231,6 +231,7 @@ linctl user me
 ```bash
 # List comments on an issue
 linctl comment list LIN-123
+linctl comment list LIN-123 --resolved unresolved
 
 # Add a comment to an issue
 linctl comment create LIN-123 --body "Fixed the authentication bug"
@@ -422,10 +423,13 @@ linctl comment ls <issue-id> [flags]    # Alias
 # Flags:
   -l, --limit int          Maximum results (default 50)
   -o, --sort string        Sort order: linear (default), created, updated
+      --resolved string    Resolution filter: all (default), resolved, unresolved
+      --no-children        Only show root comments (skip comments that have a parent)
 
 # Examples:
 linctl comment list LIN-123      # Shows all comments with timestamps
 linctl comment list LIN-456 -l 10 # Show latest 10 comments
+linctl comment list LIN-123 --resolved resolved
 
 # Add comment to issue
 linctl comment create <issue-id> --body "Comment text"

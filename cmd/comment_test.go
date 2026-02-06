@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"testing"
+	"time"
+
+	"github.com/charlietran/linctl/pkg/api"
 )
 
 func TestCommentCommandExists(t *testing.T) {
@@ -144,6 +147,45 @@ func TestCommentListFlags(t *testing.T) {
 	}
 	if noChildrenFlag.DefValue != "false" {
 		t.Errorf("Expected default value 'false', got '%s'", noChildrenFlag.DefValue)
+	}
+
+	// Check resolved flag
+	resolvedFlag := commentListCmd.Flags().Lookup("resolved")
+	if resolvedFlag == nil {
+		t.Fatal("commentListCmd should have --resolved flag")
+	}
+	if resolvedFlag.DefValue != "all" {
+		t.Errorf("Expected default value 'all', got '%s'", resolvedFlag.DefValue)
+	}
+}
+
+func TestFilterCommentsByResolution(t *testing.T) {
+	now := time.Now()
+	comments := []api.Comment{
+		{ID: "c1", ResolvedAt: nil},
+		{ID: "c2", ResolvedAt: &now},
+		{ID: "c3", ResolvedAt: nil},
+	}
+
+	all := filterCommentsByResolution(comments, "all")
+	if len(all) != 3 {
+		t.Fatalf("Expected 3 comments for 'all', got %d", len(all))
+	}
+
+	resolved := filterCommentsByResolution(comments, "resolved")
+	if len(resolved) != 1 {
+		t.Fatalf("Expected 1 resolved comment, got %d", len(resolved))
+	}
+	if resolved[0].ID != "c2" {
+		t.Fatalf("Expected resolved comment c2, got %s", resolved[0].ID)
+	}
+
+	unresolved := filterCommentsByResolution(comments, "unresolved")
+	if len(unresolved) != 2 {
+		t.Fatalf("Expected 2 unresolved comments, got %d", len(unresolved))
+	}
+	if unresolved[0].ID != "c1" || unresolved[1].ID != "c3" {
+		t.Fatalf("Expected unresolved comments c1, c3; got %s, %s", unresolved[0].ID, unresolved[1].ID)
 	}
 }
 

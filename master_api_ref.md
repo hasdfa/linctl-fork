@@ -381,6 +381,7 @@ query Comments($issueId: String!, $first: Int, $after: String) {
       nodes {
         id
         body
+        resolvedAt
         user {
           name
           email
@@ -572,6 +573,7 @@ linctl user get user@example.com
 # List comments
 linctl comment list LIN-123
 linctl comment ls LIN-123
+linctl comment list LIN-123 --resolved unresolved
 
 # Add comment
 linctl comment create LIN-123 --body "Comment text"
