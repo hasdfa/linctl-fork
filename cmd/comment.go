@@ -81,6 +81,16 @@ var commentListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Filter by resolution status if requested.
+		resolvedFilter, _ := cmd.Flags().GetString("resolved")
+		switch resolvedFilter {
+		case "all", "resolved", "unresolved":
+			comments.Nodes = filterCommentsByResolution(comments.Nodes, resolvedFilter)
+		default:
+			output.Error(fmt.Sprintf("Invalid resolved option: %s. Valid options are: all, resolved, unresolved", resolvedFilter), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
 		// Filter out child comments if --no-children flag is set.
 		// Note: This filtering is performed client-side after fetching all comments.
 		// The Linear API doesn't support server-side filtering by parent status,
@@ -105,7 +115,11 @@ var commentListCmd = &cobra.Command{
 				if i > 0 {
 					fmt.Println("---")
 				}
-				fmt.Printf("Author: %s\n", commentAuthorName(&comment))
+				author := commentAuthorName(&comment)
+				if isCommentResolved(&comment) {
+					author = fmt.Sprintf("%s [RESOLVED]", author)
+				}
+				fmt.Printf("Author: %s\n", author)
 				fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
 				fmt.Printf("Comment:\n%s\n", comment.Body)
 			}
@@ -130,10 +144,18 @@ var commentListCmd = &cobra.Command{
 
 				// Header with author and time
 				timeAgo := formatTimeAgo(comment.CreatedAt)
-				fmt.Printf("%s %s %s\n",
-					color.New(color.FgCyan, color.Bold).Sprint(commentAuthorName(&comment)),
-					color.New(color.FgWhite, color.Faint).Sprint("•"),
-					color.New(color.FgWhite, color.Faint).Sprint(timeAgo))
+				if isCommentResolved(&comment) {
+					fmt.Printf("%s %s %s %s\n",
+						color.New(color.FgCyan, color.Bold).Sprint(commentAuthorName(&comment)),
+						color.New(color.FgWhite, color.Faint).Sprint("•"),
+						color.New(color.FgWhite, color.Faint).Sprint(timeAgo),
+						color.New(color.FgYellow, color.Bold).Sprint("[RESOLVED]"))
+				} else {
+					fmt.Printf("%s %s %s\n",
+						color.New(color.FgCyan, color.Bold).Sprint(commentAuthorName(&comment)),
+						color.New(color.FgWhite, color.Faint).Sprint("•"),
+						color.New(color.FgWhite, color.Faint).Sprint(timeAgo))
+				}
 
 				// Comment body
 				fmt.Printf("\n%s\n\n", comment.Body)
@@ -381,6 +403,28 @@ func formatTimeAgo(t time.Time) string {
 	}
 }
 
+func isCommentResolved(comment *api.Comment) bool {
+	return comment != nil && comment.ResolvedAt != nil
+}
+
+func filterCommentsByResolution(comments []api.Comment, resolvedFilter string) []api.Comment {
+	if resolvedFilter == "all" {
+		return comments
+	}
+
+	filtered := make([]api.Comment, 0, len(comments))
+	for _, comment := range comments {
+		isResolved := isCommentResolved(&comment)
+		if resolvedFilter == "resolved" && isResolved {
+			filtered = append(filtered, comment)
+		}
+		if resolvedFilter == "unresolved" && !isResolved {
+			filtered = append(filtered, comment)
+		}
+	}
+	return filtered
+}
+
 func init() {
 	rootCmd.AddCommand(commentCmd)
 	commentCmd.AddCommand(commentListCmd)
@@ -392,6 +436,7 @@ func init() {
 	// List command flags
 	commentListCmd.Flags().IntP("limit", "l", 50, "Maximum number of comments to return")
 	commentListCmd.Flags().StringP("sort", "o", "linear", "Sort order: linear (default), created, updated")
+	commentListCmd.Flags().String("resolved", "all", "Resolution filter: all (default), resolved, unresolved")
 	commentListCmd.Flags().Bool("no-children", false, "Only show root comments (skip comments that have a parent)")
 
 	// Create command flags
